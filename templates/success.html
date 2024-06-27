@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Success - DubMaster{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Success Page</h1>
+    <p>Hooray, Your video processing has started successfully!</p>
+    <div>
+        <progress value="100" max="100" id="progress-bar"></progress>
+        <p id="progress-message"></p>
+    </div>
+</div>
+
+<div class="download-container">
+    <label class="label">
+      <input class="input" type="checkbox" />
+      <span class="circle"
+        ><svg
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+          class="icon"
+        >
+          <path
+            d="M12 19V5m0 14-4-4m4 4 4-4"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            stroke="currentColor"
+          ></path>
+        </svg>
+        <div class="square"></div>
+      </span>
+      <p class="title">Download</p>
+      <p class="title">Open</p>
+    </label>
+  </div>  
+
+  <script>
+    const progressBar = document.getElementById("progress-bar");
+    const progressMessage = document.getElementById("progress-message");
+
+    const ws = new WebSocket("ws://localhost:8000/ws");
+
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        const step = data.step;
+        const totalSteps = data.total_steps;
+        const message = data.message;
+
+        const progressPercent = (step / totalSteps) * 100;
+        progressBar.value = 100 - progressPercent; // Reverse the progress value as per your style
+        progressMessage.textContent = message;
+    };
+</script>
+{% endblock %}
