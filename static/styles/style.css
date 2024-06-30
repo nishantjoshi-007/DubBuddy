@@ -1,7 +1,8 @@
-@import url(progress-bar.css);
-@import url(toggle.css);
 @import url(contact-form.css);
 @import url(about.css);
+@import url(elements/progress-bar.css);
+@import url(elements/popup.css);
+@import url(elements/toggle.css);
 
 /* Define CSS variables for themes */
 :root {

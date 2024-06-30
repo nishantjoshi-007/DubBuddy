@@ -3,7 +3,9 @@
 {% block title %}Home - DubMaster{% endblock %}
 
 {% block content %}
-  <form class="dubbing-form" method = "post" action = "/success">
+  <!-- Include the popup HTML -->
+  {% include "elements/popup.html" %}
+  <form class="dubbing-form" method="post" action="/success">
     <fieldset class="fieldset">
       <legend class="form-legend">Dubbing Tool</legend>
         <div class="mb-3">
@@ -26,15 +28,12 @@
           <div class="form-check">
             <input class="form-check-input" required type="checkbox" name="tos_check" id="FieldsetCheck" value=true>
             <label class="form-check-label" for="FieldsetCheck">
-              Agree to Terms of Service
+              Agree to <a href="#" id="tosLink">Terms of Service</a>
             </label>
           </div>
         </div>
-      <div id="error-message" style="color:red; display:none;">
-        You Must Accept the <a href="/about">Terms of Service.</a>
-      </div>
       <button type="submit" class="btn btn-primary">Submit</button>
     </fieldset>
   </form>
-
+  <script type="module" src="static/scripts/popup.js"></script>
 {% endblock %}

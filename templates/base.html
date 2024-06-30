@@ -20,7 +20,7 @@
       <li class="nav-item"><a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Home</a></li>
       <li class="nav-item"><a href="/about" class="nav-link {% if request.url.path == '/about' %}active{% endif %}">About</a></li>
       <li class="nav-item"><a href="/contact-us" class="nav-link {% if request.url.path == '/contact-us' %}active{% endif %}" aria-current="page">Contact Us</a></li>
-    {% include 'toggle.html' %}
+    {% include 'elements/toggle.html' %}
     </ul>
   </header>
 
@@ -34,5 +34,7 @@
     </div>
   </footer>
 
+  <script type="module" src="static/scripts/cookies.js"></script>
+  <script type="module" src="static/scripts/toggle.js"></script>
 </body>
 </html>
