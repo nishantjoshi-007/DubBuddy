@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from .schemas.video_convert import Video
+from .schemas.contact_form import Contact_Form
 import time
 
 app = FastAPI()
@@ -18,14 +19,6 @@ async def home_page(request: Request):
     
 @app.post("/success", response_class=HTMLResponse)
 async def convert(request: Request, video:Video = Depends(Video.as_form)):
-    if not video.tos_check: 
-        print(f"Video URL: {video.video_url}")
-        print(f"Source Language: {video.from_lang}")
-        print(f"Target Language: {video.to_lang}")
-        print(f"Agreed to Terms of Service: {video.tos_check}")
-        return templates.TemplateResponse(request=request, name="index.html")
-    
-    # Here you can access the form data as a Pydantic model
     print(f"Video URL: {video.video_url}")
     print(f"Source Language: {video.from_lang}")
     print(f"Target Language: {video.to_lang}")
@@ -36,6 +29,29 @@ async def convert(request: Request, video:Video = Depends(Video.as_form)):
     
 @app.get("/contact-us", response_class=HTMLResponse)
 async def contact_us_page(request: Request):
+    return templates.TemplateResponse(
+        request=request, name="contact-us.html"
+    )
+
+@app.post("/contact-us", response_class=HTMLResponse)
+async def contact_us_form(request: Request, contact_form:Contact_Form = Depends(Contact_Form.as_form)):    
+    # debug
+    print(f"User Name: {contact_form.name}")
+    print(f"User Email: {contact_form.email}")
+    print(f"Subject: {contact_form.subject}")
+    print(f"Message: {contact_form.message}")
+    print(f"File: {contact_form.uploaded_file}")
+    
+    file_names = []
+    if contact_form.uploaded_file:
+        for uploaded_file in contact_form.uploaded_file:
+            file_location = f"inquires/{uploaded_file.filename}"
+            with open(file_location, "wb") as f:
+                f.write(uploaded_file.file.read())
+            file_names.append(uploaded_file.filename)
+    else:
+        file_name = None
+    
     return templates.TemplateResponse(
         request=request, name="contact-us.html"
     )
