@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Request, Depends, WebSocket
+from fastapi import FastAPI, Request, Depends, WebSocket, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from .schemas.video_convert import Video
 from .schemas.contact_form import Contact_Form
+from .src.contact_form import send_data_to_database, process_uploaded_files
+from .src import combine
 import time
 
 app = FastAPI()
@@ -18,11 +20,9 @@ async def home_page(request: Request):
     )
     
 @app.post("/success", response_class=HTMLResponse)
-async def convert(request: Request, video:Video = Depends(Video.as_form)):
-    print(f"Video URL: {video.video_url}")
-    print(f"Source Language: {video.from_lang}")
-    print(f"Target Language: {video.to_lang}")
-    print(f"Agreed to Terms of Service: {video.tos_check}")
+async def convert(request: Request, background_task:BackgroundTasks, video: Video = Depends(Video.as_form)):
+    print(video.video_url)
+    background_task.add_task(combine.final_method, video.video_url, "process", video.from_lang, video.to_lang, video.tos_check)
     return templates.TemplateResponse(
         request=request, name="success.html"
     )
@@ -35,23 +35,16 @@ async def contact_us_page(request: Request):
 
 @app.post("/contact-us", response_class=HTMLResponse)
 async def contact_us_form(request: Request, contact_form:Contact_Form = Depends(Contact_Form.as_form)):    
-    # debug
-    print(f"User Name: {contact_form.name}")
-    print(f"User Email: {contact_form.email}")
-    print(f"Subject: {contact_form.subject}")
-    print(f"Message: {contact_form.message}")
-    print(f"File: {contact_form.uploaded_file}")
+    file_names = process_uploaded_files(contact_form.email, contact_form.uploaded_file)
     
-    file_names = []
-    if contact_form.uploaded_file:
-        for uploaded_file in contact_form.uploaded_file:
-            file_location = f"inquires/{uploaded_file.filename}"
-            with open(file_location, "wb") as f:
-                f.write(uploaded_file.file.read())
-            file_names.append(uploaded_file.filename)
-    else:
-        file_name = None
-    
+    send_data_to_database(
+        contact_form.name, 
+        contact_form.email, 
+        contact_form.subject, 
+        contact_form.message, 
+        file_names
+    )
+
     return templates.TemplateResponse(
         request=request, name="contact-us.html"
     )
@@ -66,10 +59,10 @@ async def about_page(request: Request):
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     tasks = [
-        ("Downloading video", 2),
-        ("Extracting audio", 2),
-        ("Converting audio to text", 3),
-        ("Translating text", 3),
+        ("Downloading video", combine.YotubeDownloader),
+        ("Extracting audio", combine.YotubeDownloader),
+        ("Converting audio to text", combine.AudioProcess),
+        ("Translating text", combine.TranslationProcess),
         ("Converting text to audio", 3),
         ("Merging audio and video", 2)
     ]

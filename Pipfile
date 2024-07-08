@@ -4,11 +4,19 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+numpy = "1.26.0"
 fastapi = "*"
 uvicorn = "*"
 jinja2 = "*"
-ffmpeg = "*"
 moviepy = "*"
+yt-dlp = "*"
+openai-whisper = "*"
+ffmpeg-python = "*"
+argostranslate = "*"
+argos-translate-files = "*"
+pydub = "*"
+coqui-tts = "*"
+wexpect = "*"
 
 [dev-packages]
 

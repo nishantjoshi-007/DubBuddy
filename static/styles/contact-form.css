@@ -125,6 +125,24 @@ textarea{
     background-color: #fff;
 }
 
+.file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 5px 0;
+}
+
+.remove-file-btn {
+    background-color: red;
+    color: white;
+    border: none;
+    padding: 5px 5px;
+    font-size: 12px;
+    border-radius: 3px;
+    cursor: pointer;
+	margin-left: 0.5rem;
+}
+
 @media screen and (max-width: 880px){
 	.contact-box{
 		grid-template-columns: 1fr;
