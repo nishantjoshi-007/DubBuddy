@@ -1,6 +1,5 @@
-import torch
-import torchaudio
-from nemo.collections.tts.models import FastPitchModel, HifiGanModel
+from TTS.api import TTS
+import wexpect
 import os
 from ..util.util import convert_audio_to_wav
 
@@ -55,25 +54,24 @@ class TextToSpeech:
 
             if wav_audio_file:
                 print("text to speech started.")
-                
-                if torch.cuda.is_available():
-                    device = torch.device('cuda')
-                else:
-                    device = torch.device('cpu')
-                
-                tts_model = FastPitchModel.from_pretrained(model_name="tts_en_fastpitch", map_location=device)
-                vocoder_model = HifiGanModel.from_pretrained(model_name="tts_hifigan", map_location=device)
 
-                speaker_wav = wav_audio_file
-                speaker_embedding = tts_model.extract_speaker_embeddings(speaker_wav)
+            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False)
+            print("model loaded successfully.")
 
-                parsed = tts_model.parse(translated_text)
-                spectrogram = tts_model.generate_spectrogram(tokens=parsed, speaker_embeddings=speaker_embedding)
-                speech = vocoder_model.convert_spectrogram_to_audio(spec=spectrogram)
+            #to download the model
+            command = "python -c 'from TTS.api import TTS; tts = TTS(\"tts_models/multilingual/multi-dataset/xtts_v2\", gpu=False)'"
+            child = wexpect.spawn(command, encoding='utf-8', timeout=120)
+            child.expect("Otherwise, I agree to the terms of the non-commercial CPML: https://coqui.ai/cpml")
+            child.sendline("y")
 
-                torchaudio.save(translated_audio_file, speech, sample_rate=22050)
-                print(f"Text-to-speech conversion completed. Audio saved to {translated_audio_file}")
-                return translated_audio_file
+            if wav_audio_file:
+                print("text to speech started.")
+                tts.tts_to_file(
+                    text = translated_text,
+                    file_path = translated_audio_file,
+                    speaker_wav = wav_audio_file,
+                    language = self.to_lang_code
+                )
 
         except Exception as e:
             print(f"Error during Text to Speech conversion: {e}")
