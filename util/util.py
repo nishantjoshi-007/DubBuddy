@@ -19,3 +19,12 @@ def cleanup(unique_dir_path:str) -> None:
         shutil.rmtree(unique_dir_path)
     except Exception as e:
         print(f"Error during deleting the unique folder: {e}")
+        
+        
+        
+#function to format timestamps
+def format_timestamp(time_in_seconds):
+    hours = int(time_in_seconds // 3600)
+    minutes = int((time_in_seconds % 3600) // 60)
+    seconds = int(time_in_seconds % 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"

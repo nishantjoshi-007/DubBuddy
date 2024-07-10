@@ -2,3 +2,6 @@
 
 __pycache__/
 *.pyc
+
+Dockerfile
+docker-compose.yaml
