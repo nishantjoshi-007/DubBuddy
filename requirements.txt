@@ -9,7 +9,6 @@ opencv-python
 pydantic
 pydub
 srt
-TTS
 uvicorn
 whisper-timestamped
 yt-dlp
