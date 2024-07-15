@@ -1,0 +1,16 @@
+argos-translate-files
+argostranslate
+fastapi
+ffmpeg-python
+Jinja2
+moviepy
+openai-whisper
+opencv-python
+pydantic
+pydub
+srt
+TTS
+uvicorn
+pexpect
+whisper-timestamped
+yt-dlp
