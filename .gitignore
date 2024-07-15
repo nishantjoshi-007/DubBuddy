@@ -3,7 +3,4 @@
 __pycache__/
 *.pyc
 
-Dockerfile
-docker-compose.yaml
-
-config.md
+venv/
