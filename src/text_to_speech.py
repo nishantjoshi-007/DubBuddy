@@ -1,6 +1,5 @@
+from TTS.api import TTS
 import torch
-import torchaudio
-from nemo.collections.tts.models import FastPitchModel, HifiGanModel
 import os
 from ..util.util import convert_audio_to_wav
 
@@ -51,29 +50,34 @@ class TextToSpeech:
 
         #get the model, start text to speech with original voice and translated text
         try:
-            translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}.wav")
+            text_to_speech_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}.wav")
+            translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}finalaudio.wav")
 
-            if wav_audio_file:
-                print("text to speech started.")
+            if torch.cuda.is_available():
+                device = torch.device('cuda')
+            else:
+                device = torch.device('cpu')
 
-                if torch.cuda.is_available():
-                    device = torch.device('cuda')
-                else:
-                    device = torch.device('cpu')
+            # Text to speech
+            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False).to(device)
+            tts.tts_to_file(
+                text = translated_text,
+                file_path = text_to_speech_audio_file,
+                speaker_wav = wav_audio_file,
+                language = self.to_lang_code
+            )
+            print(f"Text-to-speech conversion completed. Audio saved to {text_to_speech_audio_file}")
 
-                tts_model = FastPitchModel.from_pretrained(model_name="tts_en_fastpitch", map_location=device)
-                vocoder_model = HifiGanModel.from_pretrained(model_name="tts_hifigan", map_location=device)
+            # Voice conversion
+            tts_vc = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False).to(device)
+            tts_vc.voice_conversion_to_file(
+                source_wav = text_to_speech_audio_file, 
+                target_wav = wav_audio_file, 
+                file_path = translated_audio_file
+            )
+            print(f"Voice conversion completed. Audio saved to {translated_audio_file}")
 
-                speaker_wav = wav_audio_file
-                speaker_embedding = tts_model.extract_speaker_embeddings(speaker_wav)
-
-                parsed = tts_model.parse(translated_text)
-                spectrogram = tts_model.generate_spectrogram(tokens=parsed, speaker_embeddings=speaker_embedding)
-                speech = vocoder_model.convert_spectrogram_to_audio(spec=spectrogram)
-
-                torchaudio.save(translated_audio_file, speech, sample_rate=22050)
-                print(f"Text-to-speech conversion completed. Audio saved to {translated_audio_file}")
-                return translated_audio_file
+            return translated_audio_file
 
         except Exception as e:
             print(f"Error during Text to Speech conversion: {e}")

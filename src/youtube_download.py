@@ -23,7 +23,7 @@ class YotubeDownloader:
 
 
     #method to download video    
-    def video_download(self):
+    def video_download(self) -> str:
         try:
             ydl_opts = {
                 "format" : "bestvideo/best",
@@ -44,7 +44,7 @@ class YotubeDownloader:
 
 
     #method to download audio
-    def audio_download(self):
+    def audio_download(self) -> str:
         try:
             ydl_opts = {
                 "format" : "bestaudio/best",
@@ -65,7 +65,7 @@ class YotubeDownloader:
 
 
     #method to extract title and return it            
-    def title_extract(self):
+    def title_extract(self) -> str:
         try:
             ydl_opts = {
                 "format" : "best",
@@ -91,7 +91,7 @@ class YotubeDownloader:
 
         
     #returns the unique dir
-    def get_unique_directory(self):
+    def get_unique_directory(self) -> str:
         try:
             return self.unique_dir_path
         except Exception as e:
@@ -100,7 +100,7 @@ class YotubeDownloader:
    
   
     #generate unique id for each process
-    def unique_id(self):
+    def unique_id(self) -> str:
         try:
             return str(uuid.uuid4())
         except Exception as e:

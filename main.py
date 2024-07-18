@@ -1,38 +1,39 @@
-from fastapi import FastAPI, Request, Depends, WebSocket, BackgroundTasks
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, Depends, BackgroundTasks
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from .schemas.video_convert import Video
-from .schemas.contact_form import Contact_Form
+from .schemas.model import Video, Contact_Form
 from .src.contact_form import send_data_to_database, process_uploaded_files
-from .src import combine
-import time
+from .src.main import final_method
+import os
+from urllib.parse import quote
 
 app = FastAPI()
-app.mount('/static', StaticFiles(directory='static'), name='Static')
-templates = Jinja2Templates(directory='templates')
+app.mount('/static', StaticFiles(directory='./static'), name='Static')
+templates = Jinja2Templates(directory='./templates')
 
+translated_video_download = None
 
 @app.get("/", response_class=HTMLResponse)
 async def home_page(request: Request):
     return templates.TemplateResponse(
         request=request, name="index.html"
     )
-    
-@app.post("/success", response_class=HTMLResponse)
-async def convert(request: Request, background_task:BackgroundTasks, video: Video = Depends(Video.as_form)):
-    print(video.video_url)
-    background_task.add_task(combine.final_method, video.video_url, "process", video.from_lang, video.to_lang, video.tos_check)
+
+
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
     return templates.TemplateResponse(
-        request=request, name="success.html"
+        request=request, name="about.html"
     )
-    
+
+
 @app.get("/contact-us", response_class=HTMLResponse)
 async def contact_us_page(request: Request):
     return templates.TemplateResponse(
         request=request, name="contact-us.html"
     )
-
+    
 @app.post("/contact-us", response_class=HTMLResponse)
 async def contact_us_form(request: Request, contact_form:Contact_Form = Depends(Contact_Form.as_form)):    
     file_names = process_uploaded_files(contact_form.email, contact_form.uploaded_file)
@@ -48,30 +49,36 @@ async def contact_us_form(request: Request, contact_form:Contact_Form = Depends(
     return templates.TemplateResponse(
         request=request, name="contact-us.html"
     )
+    
 
-@app.get("/about", response_class=HTMLResponse)
-async def about_page(request: Request):
+@app.post("/success", response_class=HTMLResponse)
+async def convert(request: Request, background_task:BackgroundTasks, video: Video = Depends(Video.as_form)):
+    global translated_video_download, processing_status
+
+    def save_translated_video_path(translated_video_file):
+        global translated_video_download, processing_status
+        translated_video_download = translated_video_file
+        processing_status = "completed"
+
+    processing_status = "processing"
+    background_task.add_task(final_method, video.video_url, "./static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path)
+            
     return templates.TemplateResponse(
-        request=request, name="about.html"
+        request=request, name="success.html"
     )
-    
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    tasks = [
-        ("Downloading video", combine.YotubeDownloader),
-        ("Extracting audio", combine.YotubeDownloader),
-        ("Converting audio to text", combine.AudioProcess),
-        ("Translating text", combine.TranslationProcess),
-        ("Converting text to audio", 3),
-        ("Merging audio and video", 2)
-    ]
-    
-    for index, (task, duration) in enumerate(tasks):
-        await websocket.send_json({"step": index + 1, "total_steps": len(tasks), "message": task})
-        time.sleep(duration)
-    
-    await websocket.send_json({"step": len(tasks), "total_steps": len(tasks), "message": "Completed"})
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/download-video", response_class=FileResponse)
+async def download_video():
+    global translated_video_download
+    
+    if translated_video_download:
+        return FileResponse(translated_video_download, media_type="video/mp4", filename=os.path.basename(translated_video_download))
+
+@app.get("/process-status")
+async def process_status():
+    global translated_video_download, processing_status
+    
+    if translated_video_download is not None and processing_status == "completed":
+        encoded_video_path = quote(translated_video_download)
+        print(f"Processing status: {processing_status}, translated video: {encoded_video_path}")
+        return JSONResponse(content={"status": processing_status, "final_video": encoded_video_path})

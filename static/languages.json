@@ -1,0 +1,14 @@
+{
+    "from_languages": [
+      "Arabic", "Azerbaijani", "Chinese", "Czech", "Danish", "Dutch", "English",
+      "Esperanto", "Finnish", "French", "German", "Greek", "Hebrew", "Hindi",
+      "Hungarian", "Indonesian", "Irish", "Italian", "Japanese", "Korean", "Persian",
+      "Polish", "Portuguese", "Russian", "Slovak", "Spanish", "Swedish", "Turkish",
+      "Ukrainian"
+    ],
+    "to_languages": [
+      "English", "Spanish", "French", "German", "Italian", "Portuguese", "Polish",
+      "Turkish", "Russian", "Dutch", "Czech", "Arabic", "Chinese", "Japanese",
+      "Hungarian", "Korean"
+    ]
+}  

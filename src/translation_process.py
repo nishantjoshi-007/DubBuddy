@@ -66,25 +66,26 @@ class TranslationProcess:
         return underlying_translation
 
     # Translation function to translate
-    def translate(self):
+    def translate(self) -> str | None:
         try:
             # Read input file
-            with open(self.text_file, "r", encoding="utf-8") as file:
-                original_text = file.read()
-            print("Translation started...")
+            if self.text_file:
+                with open(self.text_file, "r", encoding="utf-8") as file:
+                    original_text = file.read()
+                print("Translation started...")
 
-            # Translate text
-            underlying_translation = self.translation_package()
-            
-            if underlying_translation:
-                translated_text = underlying_translation.translate(original_text)
-            
-            # Write translated output file
-            translated_text_file = os.path.join(self.translated_text_dir_path, f"{self.title}.txt")
-            with open(translated_text_file, "w", encoding="utf-8") as f:
-                f.write(translated_text)
-            print("Translation completed.")
-            return translated_text_file
+                # Translate text
+                underlying_translation = self.translation_package()
+                
+                if underlying_translation:
+                    translated_text = underlying_translation.translate(original_text)
+                
+                # Write translated output file
+                translated_text_file = os.path.join(self.translated_text_dir_path, f"{self.title}.txt")
+                with open(translated_text_file, "w", encoding="utf-8") as f:
+                    f.write(translated_text)
+                print("Translation completed.")
+                return translated_text_file
         
         except Exception as e:
             print(f"Unable to translate: {e}")

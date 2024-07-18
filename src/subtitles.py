@@ -1,7 +1,6 @@
 import os
 import whisper
 import whisper_timestamped as whisperTP
-#from backend.support_fun import format_timestamp
 from ..util.util import format_timestamp
 
 class Subtitle:

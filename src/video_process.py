@@ -9,12 +9,13 @@ import os
 class VideoProcess:
 
     #initialize and define paths
-    def __init__(self, video_file:str, translated_audio_file:str, translated_subtitle_file:str, unique_dir_path:str) -> None:
+    def __init__(self, video_file:str, translated_audio_file:str, translated_subtitle_file:str, unique_dir_path:str, title:str) -> None:
         self.video_file = video_file
         self.translated_audio_file = translated_audio_file
         self.translated_subtitle_file = translated_subtitle_file
 
         self.unique_dir_path = unique_dir_path
+        self.title = title
 
         self.translated_video_dir_path = os.path.join(self.unique_dir_path, "translated_video")
         os.makedirs(self.translated_video_dir_path, exist_ok=True) # Create the directory for translated audio
@@ -58,12 +59,14 @@ class VideoProcess:
             clip = ImageClip(img).set_duration(sub.end.total_seconds() - sub.start.total_seconds()).set_start(sub.start.total_seconds())
             subtitle_clips.append(clip)
 
-        #Adding subtitles in the video
-        video_with_subtitle = CompositeVideoClip([video] + subtitle_clips)
+            #Adding subtitles in the video
+            video_with_subtitle = CompositeVideoClip([video] + subtitle_clips)
+                
+            #Replacing the original audio in the video with translated audio
+            video_with_audio = video_with_subtitle.set_audio(translated_audio)
+                
+            #Final output video
+            final_video_file = os.path.join(self.translated_video_dir_path, f"{self.title}.mp4")
             
-        #Replacing the original audio in the video with translated audio
-        video_with_audio = video_with_subtitle.set_audio(translated_audio)
-            
-        #Final output video
-        final_video = video_with_audio.write_videofile(self.translated_video_dir_path)
-        return final_video
+            video_with_audio.write_videofile(final_video_file, codec="libx264")
+            return final_video_file

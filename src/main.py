@@ -6,11 +6,19 @@ from .text_to_speech import TextToSpeech
 from .subtitles import Subtitle
 from .video_process import VideoProcess
 from ..util.util import cleanup
-import time
+import asyncio
 
 
-def final_method(url, base_path, from_lang, to_lang, tos_check):
+async def final_method(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
     url = str(url)
+    
+    #from lang code 
+    from_language = from_lang
+    from_lang_code = language_code_mapping.get(from_language)
+
+    #to lang code 
+    to_language = to_lang
+    to_lang_code = language_code_mapping.get(to_language)
     
     try:
     #################################################################################################### 
@@ -34,31 +42,23 @@ def final_method(url, base_path, from_lang, to_lang, tos_check):
 
     ####################################################################################################         
         #audio to text
-        audio_converter = AudioProcess(original_audio_file, unique_directory, video_title)
-        original_text_file = audio_converter.audio_to_text()
+        text_converter = AudioProcess(original_audio_file, unique_directory, video_title)
+        original_text_file = text_converter.audio_to_text()
         print(f"text file is saved here: {original_text_file}")
-        
-        #translate text
-        if original_text_file:
-            
-            #from lang code 
-            from_language = from_lang
-            from_lang_code = language_code_mapping.get(from_language)
-
-            #to lang code 
-            to_language = to_lang
-            to_lang_code = language_code_mapping.get(to_language)
 
     ####################################################################################################    
+        #translate text
+        if original_text_file and from_lang_code and to_lang_code:
             if from_lang_code and to_lang_code:
                 text_translator = TranslationProcess(unique_directory, original_text_file, from_lang_code, to_lang_code, video_title)
                 translated_text_file = text_translator.translate()
                 print(f"translated text file is here: {translated_text_file}")   
     
     ####################################################################################################             
+                #text to speech
                 if translated_text_file:
-                    audio_translator = TextToSpeech(translated_text_file, original_audio_file, to_lang_code, unique_directory, video_title, tos_check)
-                    translated_audio_file = audio_translator.text_to_audio()
+                    audio_converter = TextToSpeech(translated_text_file, original_audio_file, to_lang_code, unique_directory, video_title, tos_check)
+                    translated_audio_file = audio_converter.text_to_audio()
                     print(f"translated audio is here: {translated_audio_file}")
 
     #################################################################################################### 
@@ -70,19 +70,22 @@ def final_method(url, base_path, from_lang, to_lang, tos_check):
 
     #################################################################################################### 
                         #merge video
-                        if translated_subtitle_file:
-                            video_merger = VideoProcess(original_video_file, translated_audio_file, translated_subtitle_file, unique_directory)
+                        if translated_subtitle_file and translated_audio_file and original_video_file:
+                            video_merger = VideoProcess(original_video_file, translated_audio_file, translated_subtitle_file, unique_directory, video_title)
                             translated_video_file = video_merger.video_merger()
                             print(f"translated video with subtitle is stored here: {translated_video_file}")
+                            
+                            # Store the final video path in the callback
+                            save_translated_video_path(translated_video_file)
 
         
-        #sleep
-        print("sleeping for 60 seconds.")
-        time.sleep(60)
+        # #sleep
+        # print("sleeping for 60 seconds.")
+        # await asyncio.sleep(60)
         
-        #delete directory       
-        cleanup(unique_directory)
-        print("directory has been deleted.")
+        # #delete directory       
+        # cleanup(unique_directory)
+        # print("directory has been deleted.")
 
     except Exception as e:
         print(f"Error in final method: {e}")
