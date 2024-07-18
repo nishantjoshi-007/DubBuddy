@@ -1,25 +1,14 @@
 # This is dev branch of repo
 
-from TTS.api import TTS
+```python
 import wexpect
 
-            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False)
-            print("model loaded successfully.")
-
-            #to download the model
-            command = "python -c 'from TTS.api import TTS; tts = TTS(\"tts_models/multilingual/multi-dataset/xtts_v2\", gpu=False)'"
-            child = wexpect.spawn(command, encoding='utf-8', timeout=120)
-            child.expect("Otherwise, I agree to the terms of the non-commercial CPML: https://coqui.ai/cpml")
-            child.sendline("y")
-
-            if wav_audio_file:
-                print("text to speech started.")
-                tts.tts_to_file(
-                    text = translated_text,
-                    file_path = translated_audio_file,
-                    speaker_wav = wav_audio_file,
-                    language = self.to_lang_code
-                )
+#to download the model
+command = "python -c 'from TTS.api import TTS; tts = TTS(\"tts_models/multilingual/multi-dataset/xtts_v2\", gpu=False)'"
+child = wexpect.spawn(command, encoding='utf-8', timeout=120)
+child.expect("Otherwise, I agree to the terms of the non-commercial CPML: https://coqui.ai/cpml")
+child.sendline("y")
+```
 
 ### imp github links:
 - https://github.com/yt-dlp/yt-dlp
@@ -27,22 +16,27 @@ import wexpect
 - https://github.com/argosopentech/argos-translate
 - https://github.com/LibreTranslate/argos-translate-files
 - https://github.com/coqui-ai/TTS
-- https://github.com/espnet/espnet
-- https://github.com/facebookresearch/fairseq
+
+### need to check this out for audio to text
+- https://github.com/openai/openai-python
+- https://platform.openai.com/docs/guides/speech-to-text/quickstart
 
 ### youtube video links for tries:
 - https://youtu.be/VaGfBBVorxo?si=laASdDbpG0qkMRMN
 - https://youtu.be/2Q_m-sHZgVg?si=_m1shAV1oBnvVRhO
-
 
 ### other imp links:
 - https://uiverse.io/
 - https://getbootstrap.com/docs/5.3/getting-started/introduction/
 - https://fastapi.tiangolo.com/learn/
 - https://docs.coqui.ai/en/dev/index.html
+- https://docs.coqui.ai/en/latest/models/xtts.html
 - https://pytorch.org/get-started/locally/
 - https://fastapi.tiangolo.com/deployment/docker/
 
+## potential options to use
+- https://github.com/espnet/espnet
+- https://github.com/facebookresearch/fairseq
 
 
 To install Python 3.10.12 on your AWS Ubuntu instance, you can follow these steps:
