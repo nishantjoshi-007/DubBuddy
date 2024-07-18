@@ -11,7 +11,7 @@ import asyncio, logging
 #configured logging file
 logging.basicConfig(filename='logs/combine.log', level=logging.INFO)
 
-def final_method(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
+def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
     url = str(url)
     
     #from lang code 

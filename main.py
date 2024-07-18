@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from .schemas.model import Video, Contact_Form
 from .src.contact_form import send_data_to_database, process_uploaded_files
-from .src.combine import final_method
+from .src.main import main
 import os, json, asyncio, logging
 from urllib.parse import quote
 
@@ -62,7 +62,7 @@ async def convert(request: Request, background_task:BackgroundTasks, video: Vide
         processing_status = "completed"
 
     processing_status = "processing"
-    background_task.add_task(final_method, video.video_url, "./static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path)
+    background_task.add_task(main, video.video_url, "./static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path)
             
     return templates.TemplateResponse(
         request=request, name="success.html"

@@ -50,8 +50,8 @@ class TextToSpeech:
 
         #get the model, start text to speech with original voice and translated text
         try:
-            translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}.wav")
-            final_translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}finalaudio.wav")
+            text_to_speech_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}.wav")
+            translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}finalaudio.wav")
             
             # Get device
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -62,7 +62,7 @@ class TextToSpeech:
             tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False).to(device)
             tts.tts_to_file(
                 text = translated_text,
-                file_path = translated_audio_file,
+                file_path = text_to_speech_audio_file,
                 speaker_wav = wav_audio_file,
                 language = self.to_lang_code
             )
@@ -72,10 +72,10 @@ class TextToSpeech:
             tts_vc.voice_conversion_to_file(
                 source_wav = translated_audio_file, 
                 target_wav = wav_audio_file, 
-                file_path = final_translated_audio_file
+                file_path = translated_audio_file
             )
             
-            return final_translated_audio_file
+            return translated_audio_file
             
         except Exception as e:
             logging.error(f"Error during Text to Speech conversion: {e}")
