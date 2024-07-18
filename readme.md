@@ -28,6 +28,7 @@ tts.voice_conversion_to_file(source_wav="app\static\process_videos\910d5354-be74
 ### youtube video links for tries:
 - https://youtu.be/VaGfBBVorxo?si=laASdDbpG0qkMRMN
 - https://youtu.be/2Q_m-sHZgVg?si=_m1shAV1oBnvVRhO
+- https://youtube.com/shorts/eyfjgqZAjz4?si=g3Oa3dtIxgcgPlfB
 
 ### other imp links:
 - https://uiverse.io/
