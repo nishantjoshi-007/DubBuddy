@@ -8,6 +8,10 @@ command = "python -c 'from TTS.api import TTS; tts = TTS(\"tts_models/multilingu
 child = wexpect.spawn(command, encoding='utf-8', timeout=120)
 child.expect("Otherwise, I agree to the terms of the non-commercial CPML: https://coqui.ai/cpml")
 child.sendline("y")
+
+
+#checking voice conversion
+tts.voice_conversion_to_file(source_wav="app\static\process_videos\910d5354-be74-48e7-a9c2-db139b744c28\translated_audio\Nvidia CEO admits he can be demanding #shorts.wav", target_wav="app\static\process_videos\910d5354-be74-48e7-a9c2-db139b744c28\original_audio\Nvidia CEO admits he can be demanding #shorts.wav", file_path="app\static\output.wav")
 ```
 
 ### imp github links:
