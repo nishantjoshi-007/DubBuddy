@@ -1,6 +1,7 @@
 import yt_dlp
 import os, uuid
 import logging
+from ..util.util import sanitize_filename
 
 class YotubeDownloader:
     
@@ -81,7 +82,8 @@ class YotubeDownloader:
                 info_dict = ydl.extract_info(self.url, download=False)
         
                 if info_dict is not None:
-                    self.title = info_dict.get("title", "No title found.")
+                    youtube_title = info_dict.get("title", "No title found.")
+                    self.title = sanitize_filename(youtube_title)
                 else:
                     self.title = "No title found."
                 

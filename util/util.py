@@ -29,3 +29,11 @@ def format_timestamp(time_in_seconds):
     minutes = int((time_in_seconds % 3600) // 60)
     seconds = int(time_in_seconds % 60)
     return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+
+#remove invalid characters from filename
+def sanitize_filename(filename):
+    invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*', "'"]
+    for char in invalid_chars:
+        filename = filename.replace(char, '')
+    return filename

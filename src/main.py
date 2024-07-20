@@ -11,7 +11,7 @@ import asyncio, logging
 #configured logging file
 logging.basicConfig(filename='logs/combine.log', level=logging.INFO)
 
-def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
+async def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
     url = str(url)
     
     #from lang code 
@@ -72,10 +72,10 @@ def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_pa
                             save_translated_video_path(translated_video_file)
         
         #sleep for certain time
-        #await asyncio.sleep(300)
+        await asyncio.sleep(300)
         
         # delete unique directory       
-        # cleanup(unique_directory)
+        cleanup(unique_directory)
         logging.info("procces has been completed and unique directory has been deleted.")
 
     except Exception as e:

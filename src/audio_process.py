@@ -19,7 +19,7 @@ class AudioProcess:
     #load whisper model
     def get_model(self):
         try:
-            model = whisper.load_model("medium")
+            model = whisper.load_model("large")
             return model
         except Exception as e:
             logging.error(f"Error during loading the model: {e}")
