@@ -5,13 +5,6 @@
 from moviepy.editor import VideoFileClip
 import os
 
-#remove invalid characters from filename
-def sanitize_filename(filename):
-    invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*', "'"]
-    for char in invalid_chars:
-        filename = filename.replace(char, '')
-    return filename
-
 #check if directory exist
 def ensure_directory_exists(directory):
     if not os.path.exists(directory):

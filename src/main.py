@@ -79,13 +79,13 @@ async def final_method(url, base_path, from_lang, to_lang, tos_check, save_trans
                             save_translated_video_path(translated_video_file)
 
         
-        # #sleep
-        # print("sleeping for 60 seconds.")
-        # await asyncio.sleep(60)
+        #sleep
+        print("sleeping for 180 seconds.")
+        await asyncio.sleep(180)
         
-        # #delete directory       
-        # cleanup(unique_directory)
-        # print("directory has been deleted.")
+        #delete directory       
+        cleanup(unique_directory)
+        print("directory has been deleted.")
 
     except Exception as e:
         print(f"Error in final method: {e}")
