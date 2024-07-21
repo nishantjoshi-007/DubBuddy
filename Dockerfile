@@ -11,12 +11,18 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN apt-get update && apt-get install -y python3-opencv
 RUN apt-get update && apt-get install -y ffmpeg
 
+# Install Nginx
+RUN apt-get update && apt-get install -y nginx
+
 #copy and install requirements
 COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
 #copy the entire fastapi project directory
 COPY ./app /code/app
+
+# Copy Nginx configuration file
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
 #set working directory
 WORKDIR /code/app
@@ -25,4 +31,5 @@ WORKDIR /code/app
 EXPOSE 80
 
 #set a default command to run when the container starts
-CMD ["fastapi", "run", "main.py", "--port", "80"]
+# CMD ["fastapi", "run", "main.py", "--port", "80"]
+CMD /bin/bash -c "fastapi run main.py --port 80 & nginx -g 'daemon off;'"
