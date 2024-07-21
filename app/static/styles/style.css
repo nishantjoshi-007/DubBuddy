@@ -1,0 +1,78 @@
+@import url(contact-form.css);
+@import url(about.css);
+@import url(success.css);
+@import url(elements/popup.css);
+@import url(elements/toggle.css);
+
+/* Define CSS variables for themes */
+:root {
+    --background-color: #fff;
+    --text-color: #000;
+    --primary-color: #007bff;
+}
+
+body.dark-theme {
+    --background-color: #28292c;
+    --text-color: #d8dbe0;
+    --primary-color: #17a2b8;
+}
+
+/* Apply the theme variables */
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: 'Josefin Sans', sans-serif;
+}
+
+/* Header styling */
+.header {
+    border-bottom: 1px solid var(--primary-color);
+    padding-bottom: 1rem;
+    margin-bottom: 2rem;
+}
+
+.header .brand-logo {
+    text-decoration: none;
+    color: inherit;
+}
+
+.header .brand-name {
+    font-size: 1.5rem;
+}
+
+.nav-link {
+    color: var(--primary-color);
+}
+
+.nav-link.active {
+    background-color: var(--primary-color);
+    color: #ffffff;
+}
+
+/* Form styling */
+.dubbing-form {
+    padding: 1rem;
+    margin-bottom: 2rem;
+    box-shadow: 0px 0px 19px 5px rgba(0,0,0,0.19);
+}
+
+.form-legend {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    color: var(--text-color);
+}
+
+/* Footer styling */
+.footer {
+    border-top: 1px solid var(--primary-color);
+    padding-top: 1rem;
+    margin-top: 2rem;
+}
+
+.footer .text-body-secondary {
+    color: var(--text-color) !important;
+}
