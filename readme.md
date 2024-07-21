@@ -42,7 +42,8 @@ tts.voice_conversion_to_file(source_wav="app\static\process_videos\910d5354-be74
 ## potential options to use
 - https://github.com/espnet/espnet
 - https://github.com/facebookresearch/fairseq
-
+- https://github.com/cmusphinx/
+- https://github.com/kaldi-asr/kaldi
 
 To install Python 3.10.12 on your AWS Ubuntu instance, you can follow these steps:
 
