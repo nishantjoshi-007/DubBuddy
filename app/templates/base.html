@@ -11,17 +11,24 @@
 </head>
 
 <body class="d-flex flex-column min-vh-100">
-  <header class="header d-flex justify-content-between align-items-center py-3 mb-4 border-bottom container">
-    <a href="/" class="brand-logo d-flex align-items-center text-decoration-none">
-      <img src="static/images/dubbuddy_icon.ico" alt="DubBuddy Logo" width="40" height="32" class="bi me-2">
-      <span class="brand-name fs-4">DubBuddy</span>
-    </a>
-    <ul class="nav nav-pills">
-      <li class="nav-item"><a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Home</a></li>
-      <li class="nav-item"><a href="/about" class="nav-link {% if request.url.path == '/about' %}active{% endif %}">About</a></li>
-      <li class="nav-item"><a href="/contact-us" class="nav-link {% if request.url.path == '/contact-us' %}active{% endif %}" aria-current="page">Contact Us</a></li>
-    {% include 'elements/toggle.html' %}
-    </ul>
+  <header class="header py-3 mb-4 border-bottom">
+    <div class="container d-flex flex-wrap justify-content-between align-items-center">
+      <a href="/" class="brand-logo d-flex align-items-center mb-2 mb-lg-0 text-decoration-none">
+        <img src="static/images/dubbuddy_icon.ico" alt="DubBuddy Logo" width="40" height="32" class="bi me-2">
+        <span class="brand-name fs-4">DubBuddy</span>
+      </a>
+      <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+        <ul class="nav nav-pills">
+          <li class="nav-item"><a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Home</a></li>
+          <li class="nav-item"><a href="/about" class="nav-link {% if request.url.path == '/about' %}active{% endif %}">About</a></li>
+          <li class="nav-item"><a href="/contact-us" class="nav-link {% if request.url.path == '/contact-us' %}active{% endif %}" aria-current="page">Contact Us</a></li>
+          {% include 'elements/toggle.html' %}
+        </ul>
+      </div>
+    </div>
   </header>
 
   <main class="container flex-grow-1">
