@@ -1,1 +1,22 @@
 venv/
+
+nginx.conf
+
+server {
+    listen 80;
+
+    server_name dubbuddy.com www.dubbuddy.com;
+
+    location / {
+        proxy_pass http://dubbuddy_prod:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+#Copy Nginx configuration file
+#COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+
+#CMD /bin/bash -c "fastapi run main.py --port 80 & nginx -g 'daemon off;'"

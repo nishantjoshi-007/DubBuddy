@@ -21,9 +21,6 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt
 #copy the entire fastapi project directory
 COPY ./app /code/app
 
-# Copy Nginx configuration file
-COPY ./nginx.conf /etc/nginx/conf.d/default.conf
-
 #set working directory
 WORKDIR /code/app
 
@@ -31,5 +28,4 @@ WORKDIR /code/app
 EXPOSE 80
 
 #set a default command to run when the container starts
-# CMD ["fastapi", "run", "main.py", "--port", "80"]
-CMD /bin/bash -c "fastapi run main.py --port 80 & nginx -g 'daemon off;'"
+CMD ["fastapi", "run", "main.py", "--port", "80"]
