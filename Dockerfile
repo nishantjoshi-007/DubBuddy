@@ -21,5 +21,8 @@ COPY ./app /code/app
 #set working directory
 WORKDIR /code/app
 
+#expose the port
+EXPOSE 80
+
 #set a default command to run when the container starts
 CMD ["fastapi", "run", "main.py", "--port", "80"]
