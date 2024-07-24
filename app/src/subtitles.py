@@ -4,9 +4,6 @@ import whisper_timestamped as whisperTP
 from ..util.util import format_timestamp
 
 class Subtitle:
-    
-    #configured logging file
-    logging.basicConfig(filename='logs/subtitles.log', level=logging.INFO)
 
     #initialize and define paths
     def __init__(self, audio_file:str, unique_dir_path:str, video_title:str, subtitle_lang:str) -> None:

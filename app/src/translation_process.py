@@ -6,9 +6,6 @@ import os, logging
 
 class TranslationProcess:
 
-    #configured logging file
-    logging.basicConfig(filename='logs/translation_process.log', level=logging.INFO)
-    
     #initialize and define paths
     def __init__(self, unique_dir_path:str, text_file:str, from_lang:str, to_lang:str, title:str) -> None:
         self.from_lang = from_lang

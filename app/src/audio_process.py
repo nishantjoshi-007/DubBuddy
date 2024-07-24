@@ -3,9 +3,6 @@ import os, logging
 
 class AudioProcess:
 
-    #configured logging file
-    logging.basicConfig(filename='logs/audio_process.log', level=logging.INFO)
-
     #initialize and define paths        
     def __init__(self, audio_file:str, unique_dir_path:str, title:str) -> None:
         self.audio_file = audio_file
@@ -19,7 +16,7 @@ class AudioProcess:
     #load whisper model
     def get_model(self):
         try:
-            model = whisper.load_model("large")
+            model = whisper.load_model("base")
             return model
         except Exception as e:
             logging.error(f"Error during loading the model: {e}")

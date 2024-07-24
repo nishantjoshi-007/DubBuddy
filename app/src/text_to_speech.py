@@ -5,9 +5,6 @@ from ..util.util import convert_audio_to_wav
 
 class TextToSpeech:
 
-    #configured logging file
-    logging.basicConfig(filename='logs/text_to_speech.log', level=logging.INFO)
-
     #initialize and define paths
     def __init__(self, translated_text_file:str, audio_file:str, to_lang_code:str, unique_dir_path:str, title:str, tos_check:bool) -> None:
         self.translated_text_file = translated_text_file

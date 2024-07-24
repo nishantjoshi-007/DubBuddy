@@ -4,9 +4,6 @@ import logging
 from ..util.util import sanitize_filename
 
 class YotubeDownloader:
-    
-    #configured logging file
-    logging.basicConfig(filename='logs/youtube_download.log', level=logging.INFO)
 
     #initialize and define paths
     def __init__(self, url:str, base_dir_path:str) -> None:

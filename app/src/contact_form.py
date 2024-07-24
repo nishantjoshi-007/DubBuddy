@@ -3,9 +3,6 @@ from fastapi import UploadFile
 from typing import List, Optional
 from pydantic import EmailStr
 
-#configured logging file
-logging.basicConfig(filename='logs/contact_form.log', level=logging.INFO)
-
 # Function to process uploaded files and store them
 def process_uploaded_files(email : EmailStr, contact_dir:str, files : Optional[List[UploadFile]]) -> Optional[List[str]]:
     if not files:

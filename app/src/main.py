@@ -8,9 +8,6 @@ from .video_process import VideoProcess
 from ..util.util import cleanup
 import asyncio, logging
 
-#configured logging file
-logging.basicConfig(filename='logs/combine.log', level=logging.INFO)
-
 async def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
     url = str(url)
     
@@ -69,7 +66,7 @@ async def main(url, base_path, from_lang, to_lang, tos_check, save_translated_vi
                             translated_video_file = video_merger.video_merger()
                             
                             # Store the final video path in the callback
-                            save_translated_video_path(translated_video_file)
+                            await save_translated_video_path(translated_video_file)
         
         #sleep for certain time
         await asyncio.sleep(300)

@@ -7,10 +7,7 @@ from datetime import timedelta
 import os, logging
 
 class VideoProcess:
-    
-    #configured logging file
-    logging.basicConfig(filename='logs/video_process.log', level=logging.INFO)
-    
+        
     #initialize and define paths
     def __init__(self, video_file:str, translated_audio_file:str, translated_subtitle_file:str, unique_dir_path:str, title:str) -> None:
         self.video_file = video_file

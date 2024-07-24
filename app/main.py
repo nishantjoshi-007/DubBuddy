@@ -57,7 +57,7 @@ async def contact_us_form(request: Request, contact_form:Contact_Form = Depends(
 async def convert(request: Request, background_task:BackgroundTasks, video: Video = Depends(Video.as_form)):
     global translated_video_download, processing_status
 
-    def save_translated_video_path(translated_video_file):
+    async def save_translated_video_path(translated_video_file):
         global translated_video_download, processing_status
         translated_video_download = translated_video_file
         processing_status = "completed"

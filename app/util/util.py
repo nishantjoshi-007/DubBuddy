@@ -1,9 +1,6 @@
 from pydub import AudioSegment
 import os, shutil, logging
 
-#configured logging file
-logging.basicConfig(filename='logs/utils.log', level=logging.INFO)
-
 # Convert audio to WAV format
 def convert_audio_to_wav(audio_path:str, unique_dir_path:str, title:str) -> str | None:
     try:
