@@ -28,4 +28,4 @@ WORKDIR /code/app
 EXPOSE 80
 
 #set a default command to run when the container starts
-CMD ["fastapi", "dev", "main.py", "--port", "80"]
+CMD ["fastapi", "run", "main.py", "--port", "80", "--workers", "4"]
