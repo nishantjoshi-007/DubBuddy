@@ -78,6 +78,9 @@ async def final_method(url, base_path, from_lang, to_lang, tos_check, save_trans
     except Exception as e:
         logging.error(f"Error in final method: {e}")
         raise Exception(f"Error in final method.")
-    
+
+def final_method_sync(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
+    asyncio.run(final_method(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path))
+
 async def seperate_thread(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
-    await asyncio.to_thread(final_method, url, base_path, from_lang, to_lang, tos_check, save_translated_video_path)
+    await asyncio.to_thread(final_method_sync, url, base_path, from_lang, to_lang, tos_check, save_translated_video_path)
