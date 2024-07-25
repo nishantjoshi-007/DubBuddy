@@ -13,8 +13,8 @@ import uvicorn
 logging.basicConfig(filename='logs/main.log', level=logging.INFO)
 
 app = FastAPI()
-app.mount('/static', StaticFiles(directory='app/static'), name='Static')
-templates = Jinja2Templates(directory='app/templates')
+app.mount('/static', StaticFiles(directory='./static'), name='Static')
+templates = Jinja2Templates(directory='./templates')
 
 translated_video_download = None
 
@@ -38,7 +38,7 @@ async def contact_us_page(request: Request):
 
 @app.post("/contact-us", response_class=HTMLResponse)
 async def contact_us_form(request: Request, contact_form:Contact_Form = Depends(Contact_Form.as_form)):    
-    file_names = process_uploaded_files(contact_form.email, "app/static/inquires",contact_form.uploaded_file)
+    file_names = process_uploaded_files(contact_form.email, "./static/inquires",contact_form.uploaded_file)
     
     send_data_to_database(
         contact_form.name, 
@@ -63,7 +63,7 @@ async def convert(request: Request, background_task:BackgroundTasks, video: Vide
         processing_status = "completed"
 
     processing_status = "processing"
-    background_task.add_task(main, video.video_url, "app/static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path)
+    background_task.add_task(main, video.video_url, "./static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path)
             
     return templates.TemplateResponse(
         request=request, name="success.html"
