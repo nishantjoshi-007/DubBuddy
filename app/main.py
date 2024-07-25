@@ -10,7 +10,7 @@ from urllib.parse import quote
 import uvicorn
 
 #configured logging file
-logging.basicConfig(filename='logs/main.log', level=logging.INFO)
+logging.basicConfig(filename='main.log', level=logging.INFO)
 
 app = FastAPI()
 app.mount('/static', StaticFiles(directory='./static'), name='Static')
