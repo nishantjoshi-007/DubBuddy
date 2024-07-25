@@ -1,0 +1,6 @@
+WARNING:py.warnings:E:\languages\Python3.11\Lib\asyncio\base_events.py:1907: RuntimeWarning: coroutine 'final_method' was never awaited
+  handle = self._ready.popleft()
+
+WARNING:py.warnings:E:\languages\Python3.11\Lib\asyncio\base_events.py:1923: RuntimeWarning: coroutine 'final_method' was never awaited
+  handle = None  # Needed to break cycles when an exception occurs.
+

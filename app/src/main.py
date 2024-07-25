@@ -9,6 +9,9 @@ from ..util.util import cleanup
 import asyncio, logging
 
 async def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
+    await asyncio.to_thread(final_method, url, base_path, from_lang, to_lang, tos_check, save_translated_video_path)
+
+async def final_method(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
     url = str(url)
     
     #from lang code 
