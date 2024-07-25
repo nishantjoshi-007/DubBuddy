@@ -48,7 +48,7 @@ class TextToSpeech:
         #get the model, start text to speech with original voice and translated text
         try:
             text_to_speech_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}.wav")
-            translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}finalaudio.wav")
+            translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title} final audio.wav")
             
             # Get device
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -63,11 +63,16 @@ class TextToSpeech:
                 speaker_wav = wav_audio_file,
                 language = self.to_lang_code
             )
-            
+
+
+            # Ensure the file was created
+            if not os.path.isfile(translated_audio_file):
+                raise Exception("Voice conversion audio file was not created.")
+
             # Voice conversion
             tts_vc = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False).to(device)
             tts_vc.voice_conversion_to_file(
-                source_wav = translated_audio_file, 
+                source_wav = text_to_speech_audio_file, 
                 target_wav = wav_audio_file, 
                 file_path = translated_audio_file
             )

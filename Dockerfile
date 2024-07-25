@@ -15,6 +15,9 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN apt-get update && apt-get install -y python3-opencv
 RUN apt-get update && apt-get install -y ffmpeg
 
+#for yt-dlp latest version
+RUN pip3 install -U --pre --force-reinstall "yt-dlp[default]"
+
 #copy and install requirements
 COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r requirements.txt

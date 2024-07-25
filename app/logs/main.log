@@ -4,3 +4,8 @@ WARNING:py.warnings:E:\languages\Python3.11\Lib\asyncio\base_events.py:1907: Run
 WARNING:py.warnings:E:\languages\Python3.11\Lib\asyncio\base_events.py:1923: RuntimeWarning: coroutine 'final_method' was never awaited
   handle = None  # Needed to break cycles when an exception occurs.
 
+INFO:root:procces has been completed and unique directory has been deleted.
+INFO:root:procces has been completed and unique directory has been deleted.
+INFO:root:procces has been completed and unique directory has been deleted.
+ERROR:root:Error during downloading video from youtube: [0;31mERROR:[0m [youtube] 8-eCvn1gWIg: Requested format is not available. Use --list-formats for a list of available formats
+ERROR:root:Error in final method: Error during downloading video from youtube.
