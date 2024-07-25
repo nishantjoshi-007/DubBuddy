@@ -63,8 +63,8 @@ async def convert(request: Request, background_task:BackgroundTasks, video: Vide
         processing_status = "completed"
 
     processing_status = "processing"
-    background_task.add_task(seperate_thread, video.video_url, "./static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path)
-            
+    background_task.add_task(seperate_thread, video.video_url, "./static/process_videos", video.from_lang, video.to_lang, video.tos_check, save_translated_video_path) 
+
     return templates.TemplateResponse(
         request=request, name="success.html"
     )

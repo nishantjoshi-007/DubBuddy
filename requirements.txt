@@ -13,4 +13,3 @@ TTS
 uvicorn
 pexpect
 whisper-timestamped
-yt-dlp
