@@ -8,9 +8,6 @@ from .video_process import VideoProcess
 from ..util.util import cleanup
 import asyncio, logging
 
-async def main(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
-    await asyncio.to_thread(final_method, url, base_path, from_lang, to_lang, tos_check, save_translated_video_path)
-
 async def final_method(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
     url = str(url)
     
@@ -81,3 +78,6 @@ async def final_method(url, base_path, from_lang, to_lang, tos_check, save_trans
     except Exception as e:
         logging.error(f"Error in final method: {e}")
         raise Exception(f"Error in final method.")
+    
+async def seperate_thread(url, base_path, from_lang, to_lang, tos_check, save_translated_video_path):
+    await asyncio.to_thread(final_method, url, base_path, from_lang, to_lang, tos_check, save_translated_video_path)
