@@ -88,8 +88,7 @@ class YotubeDownloader:
 
         except Exception as e:
             logging.error(f"Error during downloading title from youtube: {e}")
-            raise Exception("Error during downloading title from youtube.")
-
+            return "No title found."
 
         
     #returns the unique dir
