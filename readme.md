@@ -6,9 +6,9 @@ Welcome to the 'DubBuddy' GitHub Repository. DubBuddy is an innovative tool that
 # :notebook_with_decorative_cover: Table of Contents
 - [Getting Started](#toolbox-getting-started)
 - [Features](#dart-features)
-- [Use Cases](#compass-use-cases)
 - [Contributing](#wave-contributing)
 - [License](#warning-license)
+- [Acknowledgements](#gem-acknowledgements)
 
 ## :toolbox: Getting Started
 
