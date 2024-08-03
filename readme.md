@@ -55,6 +55,6 @@ Distributed under the MIT License. See <a href="https://github.com/nishantjoshi-
 ## :gem: Acknowledgements
 This section is used to mention useful resources and libraries that I have used in your projects.
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- [Whisper]https://github.com/openai/whisper
+- [Whisper](https://github.com/openai/whisper)
 - [Translation](https://github.com/argosopentech/argos-translate)
 - [TTS](https://github.com/coqui-ai/TTS)
