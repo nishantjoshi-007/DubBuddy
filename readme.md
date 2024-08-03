@@ -1,160 +1,60 @@
-# This is dev branch of repo
+# :star2: DubBuddy
+<div align='center'>
+Welcome to the 'DubBuddy' GitHub Repository. DubBuddy is an innovative tool that simplifies the process of translating and dubbing videos into multiple languages using advanced voice cloning technology. This project extracts and processes video content, translating and dubbing it seamlessly while also generating subtitles. Perfect for content creators aiming to reach a global audience, DubBuddy offers a streamlined and efficient solution for multilingual video content. Explore the repository to dive into the code and see how DubBuddy can transform your videos.<h4><span> · </span> <a href="https://dub-buddy.com/"> Live Demo </a><span> · </span> <a href="https://github.com/nishantjoshi-007/DubBuddy/issues"> Report Bug </a> <span> · </span> <a href="https://github.com/nishantjoshi-007/DubBuddy/issues"> Request Feature </a></h4>
+</div>
 
-```python
-import wexpect
+# :notebook_with_decorative_cover: Table of Contents
+- [Getting Started](#toolbox-getting-started)
+- [Features](#dart-features)
+- [Use Cases](#compass-use-cases)
+- [Contributing](#wave-contributing)
+- [License](#warning-license)
 
-#to download the model
-command = "python -c 'from TTS.api import TTS; tts = TTS(\"tts_models/multilingual/multi-dataset/xtts_v2\", gpu=False)'"
-child = wexpect.spawn(command, encoding='utf-8', timeout=120)
-child.expect("Otherwise, I agree to the terms of the non-commercial CPML: https://coqui.ai/cpml")
-child.sendline("y")
+## :toolbox: Getting Started
 
+### :bangbang: Prerequisites
+- Install Visual Studio Code as Code Editor<a href="https://code.visualstudio.com/Download"> Here</a>
+- To set up this project, you'll need Python and pip installed on your machine.<a href="https://www.python.org/downloads/"> Here</a>
 
-#checking voice conversion
-tts.voice_conversion_to_file(source_wav="app\static\process_videos\910d5354-be74-48e7-a9c2-db139b744c28\translated_audio\Nvidia CEO admits he can be demanding #shorts.wav", target_wav="app\static\process_videos\910d5354-be74-48e7-a9c2-db139b744c28\original_audio\Nvidia CEO admits he can be demanding #shorts.wav", file_path="app\static\output.wav")
-```
-
-### imp github links:
-- https://github.com/yt-dlp/yt-dlp
-- https://github.com/openai/whisper
-- https://github.com/argosopentech/argos-translate
-- https://github.com/LibreTranslate/argos-translate-files
-- https://github.com/coqui-ai/TTS
-
-### need to check this out for audio to text
-- https://github.com/openai/openai-python
-- https://platform.openai.com/docs/guides/speech-to-text/quickstart
-
-### youtube video links for tries:
-- https://youtu.be/VaGfBBVorxo?si=laASdDbpG0qkMRMN
-- https://youtu.be/2Q_m-sHZgVg?si=_m1shAV1oBnvVRhO
-- https://youtube.com/shorts/eyfjgqZAjz4?si=g3Oa3dtIxgcgPlfB
-
-### other imp links:
-- https://uiverse.io/
-- https://getbootstrap.com/docs/5.3/getting-started/introduction/
-- https://fastapi.tiangolo.com/learn/
-- https://docs.coqui.ai/en/dev/index.html
-- https://docs.coqui.ai/en/latest/models/xtts.html
-- https://pytorch.org/get-started/locally/
-- https://fastapi.tiangolo.com/deployment/docker/
-
-## potential options to use
-- https://github.com/espnet/espnet
-- https://github.com/facebookresearch/fairseq
-- https://github.com/cmusphinx/
-- https://github.com/kaldi-asr/kaldi
-
-To install Python 3.10.12 on your AWS Ubuntu instance, you can follow these steps:
-
-1. **Update Your Package List:**
-   First, ensure your package list is up to date.
-
+### :gear: Installation
+1. **Clone the Repository**
    ```bash
-   sudo apt update
+   git clone https://github.com/nishantjoshi-007/DubBuddy.git
+   ```
+2. **Move in the qreator Folder**
+   ```bash
+   cd DubBuddy
+   ```
+   
+3. **Install Dependencies**
+   - Ensure you have Python 3.11.
+   - Install the Python package for virtual environment using pip:
+     ```bash
+     pip install -r requirements.txt
+     ```
+
+4. **Run the Application**
+   ```bash
+   fastapi dev main.py
    ```
 
-2. **Install Prerequisites:**
-   Install necessary packages for building Python from source.
+## :dart: Features
+- **Seamless Video and Audio Extraction**: Utilizes yt-dlp to effortlessly extract video and audio from YouTube links for processing.
+- **Accurate Audio-to-Text Conversion**: Converts audio to text using OpenAI-Whisper, ensuring high accuracy in transcription.
+- **Efficient Text Translation**: Translates text into multiple languages with Argos-Translate, catering to a global audience.
+- **High-Quality Text-to-Speech Conversion**: Converts translated text to speech with Coqui TTS, providing clear and natural-sounding audio by using voice cloning to enhance the quality and authenticity of the dubbed audio.
+- **Subtitle Generation**: Automatically generates subtitles for the newly translated video, making it accessible to a wider audience.
+- **User-Friendly Interface**: Designed for ease of use, making it simple for content creators to produce multilingual videos.
 
-   ```bash
-   sudo apt install -y build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget
-   ```
+## :wave: Contributing
+<img src="https://contrib.rocks/image?repo=Louis3797/awesome-readme-template" /> Contributions to the DubBuddy are always welcome! Whether it's reporting bugs, suggesting new features, or improving the code, your input is valuable. Please feel free to fork this repository, make your changes, and submit a pull request.
 
-3. **Download Python 3.10.12 Source Code:**
-   Navigate to Python's official website to find the download link for Python 3.10.12 source code. Then, use `wget` to download it directly on your instance.
+## :warning: License
+Distributed under the MIT License. See <a href="https://github.com/nishantjoshi-007/DubBuddy/blob/dev/LICENSE">LICENSE</a> for more information.
 
-   ```bash
-   wget https://www.python.org/ftp/python/3.10.12/Python-3.10.12.tgz
-   ```
-
-4. **Extract and Compile Python:**
-   Extract the downloaded tarball and navigate into the directory.
-
-   ```bash
-   tar -xf Python-3.10.12.tgz
-   cd Python-3.10.12
-   ```
-
-   Configure and compile Python with optimizations.
-
-   ```bash
-   ./configure --enable-optimizations
-   make -j $(nproc)
-   sudo make altinstall
-   ```
-
-   The `--enable-optimizations` flag ensures Python is compiled with optimizations, which may improve its performance.
-
-5. **Verify Installation:**
-   Check the installed Python version.
-
-   ```bash
-   python3.10 --version
-   ```
-
-6. **Update Pip:**
-   Ensure Pip is up to date for Python 3.10.
-
-   ```bash
-   python3.10 -m pip install --upgrade pip
-   ```
-
-7. **Cleanup:**
-   Optionally, you can clean up the downloaded source files.
-
-   ```bash
-   cd ..
-   rm -rf Python-3.10.12
-   ```
-
-Now, Python 3.10.12 should be installed on your AWS Ubuntu instance. You can proceed to use this Python version for setting up your NeMo toolkit or any other development tasks.
-
-
-To create a virtual environment using Python 3.10 on your AWS Ubuntu instance, you can use the `venv` module, which is included in Python 3 by default. Here are the steps:
-
-1. **Navigate to Your Project Directory:**
-   Go to the directory where you want to create your virtual environment.
-
-   ```bash
-   cd /path/to/your/project
-   ```
-
-2. **Create the Virtual Environment:**
-   Use Python 3.10 to create a virtual environment named `myenv` (you can replace `myenv` with your preferred name).
-
-   ```bash
-   python3.10 -m venv myenv
-   ```
-
-   This command will create a new directory `myenv` which contains the virtual environment.
-
-3. **Activate the Virtual Environment:**
-   Activate the virtual environment to start using Python 3.10 and its associated Pip.
-
-   ```bash
-   source myenv/bin/activate
-   devenv\Scripts\activate.bat
-   ```
-
-   After activation, your shell prompt will change to indicate that you are now working inside the virtual environment (`(myenv)` typically appears at the beginning of the prompt).
-
-4. **Install Packages:**
-   Now, you can install packages using Pip as usual. For example:
-
-   ```bash
-   pip install nemo_toolkit[all]
-   ```
-
-   This command will install the NeMo toolkit and all its dependencies into your virtual environment.
-
-5. **Deactivate the Virtual Environment:**
-   When you're done working in the virtual environment, you can deactivate it.
-
-   ```bash
-   deactivate
-   ```
-
-   This returns you to your regular shell environment.
-
-That's it! You now have Python 3.10 installed in a virtual environment on your AWS Ubuntu instance, ready to use for your development tasks.
+## :gem: Acknowledgements
+This section is used to mention useful resources and libraries that I have used in your projects.
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [Whisper]https://github.com/openai/whisper
+- [Translation](https://github.com/argosopentech/argos-translate)
+- [TTS](https://github.com/coqui-ai/TTS)
