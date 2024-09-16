@@ -1,0 +1,63 @@
+Thank you for the detailed answers! Based on the information you provided, I'll draft the **Terms and Conditions** for **DubBuddy**. Let me know if you'd like any changes or additions.
+
+---
+
+# **DubBuddy Terms and Conditions**
+
+_Last Updated: [Date]_
+
+Welcome to **DubBuddy**. By accessing or using this tool, you agree to comply with and be bound by the following terms and conditions. Please read them carefully.
+
+## 1. **License and Ownership**
+- **DubBuddy** is licensed under the **MIT License**. This means you are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, subject to the terms of the license.
+- However, **commercial use of DubBuddy** requires explicit approval. You may only use the tool for **personal, non-commercial purposes**. To seek commercial approval, users must fill out a form detailing the use case and await approval.
+
+## 2. **User Data and Privacy**
+- **DubBuddy** does not collect personal data. However, to enhance your experience, cookies are used to store preferences such as light/dark mode settings and whether you have accepted these terms and conditions. No other user data is stored or recorded.
+- By using this tool, you agree to allow the use of cookies for these purposes.
+
+## 3. **Third-Party Services and Libraries**
+- **DubBuddy** integrates with various third-party libraries and services, including but not limited to:
+  - **OpenAI Whisper**, **OpenAI TTS** (for future updates)
+  - **argos-translate-files**, **argostranslate**
+  - **fastapi**, **ffmpeg-python**
+  - **moviepy**, **opencv-python**, **pydantic**
+  - **pydub**, **srt**, **uvicorn**, **yt-dlp**
+  
+  Users must comply with the respective terms and conditions of these third-party services. **DubBuddy** assumes no responsibility for the performance, availability, or legal standing of these external services.
+
+## 4. **Restrictions on Use**
+- Users are **not permitted to use DubBuddy for commercial purposes** (e.g., making money or redistributing content) unless they have received explicit written approval from the project owner.
+- There is **no limit** on the number of videos you can use for translation or dubbing for personal purposes.
+- Users may only dub and translate content from supported websites (e.g., YouTube) and cannot upload their own video files.
+
+## 5. **User Responsibility and Liability**
+- **DubBuddy** is provided on an "as-is" basis. The project makes **no guarantees** regarding performance, accuracy, or functionality.
+- Users are responsible for ensuring that they have the rights to translate and dub the content they submit. **DubBuddy** is not liable for any **copyright violations**, mistranslations, or damages that may arise from using the tool.
+- Any legal responsibility for how the translated or dubbed content is used rests entirely on the user.
+
+## 6. **Ownership of Dubbed Content**
+- Users retain ownership of the dubbed content produced via **DubBuddy**. However, this content may only be used for **personal, non-commercial purposes** unless prior commercial approval is granted.
+- Any violation of this may result in termination of access to **DubBuddy** without notice.
+
+## 7. **Modifications and Updates**
+- The project owner reserves the right to modify or update **DubBuddy** and these terms at any time, without prior notice.
+- Users will be notified of changes to the terms or service on the website. Continued use of **DubBuddy** following these notifications constitutes acceptance of the revised terms.
+- The owner reserves the right to **terminate the service** or **ban users** at any time if deemed necessary.
+
+## 8. **Termination of Service**
+- The project owner may choose to **terminate the service** at any time and for any reason. Users will be notified of any planned shutdowns on the website.
+
+## 9. **Disclaimer of Warranties**
+- **DubBuddy** is offered without warranties of any kind, either express or implied, including but not limited to implied warranties of merchantability or fitness for a particular purpose.
+- The project owner does not warrant that the tool will meet your specific requirements or be uninterrupted, timely, secure, or error-free.
+
+## 10. **Limitation of Liability**
+- In no event shall the project owner be liable for any **indirect, incidental, special, consequential**, or **exemplary damages**, including but not limited to damages for loss of profits, goodwill, or other intangible losses.
+- Use of **DubBuddy** is at the user's sole risk, and users assume full responsibility for any content generated or used.
+
+## 11. **Governing Law**
+- These terms and conditions shall be governed by and construed in accordance with the laws of **[Your Country/State]**, without regard to its conflict of law provisions.
+
+## 12. **Contact**
+- For any questions or concerns regarding these Terms and Conditions, you may contact us at [your email/contact information].

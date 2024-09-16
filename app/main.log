@@ -39,3 +39,16 @@ WARNING:py.warnings:E:\languages\Python3.11\Lib\site-packages\librosa\core\audio
 
 ERROR:root:Error during Text to Speech conversion: [Errno 2] No such file or directory: './static/process_videos\\f7635910-615f-4909-b142-f097f6105888\\translated_audio\\Sniper training, proved hes the best\U0001f3af #movie #seriesfinalaudio.wav'
 ERROR:root:Error in final method: Error during Text to Speech conversion.
+INFO:watchfiles.main:2 changes detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
+INFO:watchfiles.main:1 change detected
