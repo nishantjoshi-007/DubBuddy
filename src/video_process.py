@@ -1,5 +1,5 @@
-from moviepy.editor import VideoFileClip , ImageClip , AudioFileClip , CompositeVideoClip
-from moviepy.video.fx.speedx import speedx
+from moviepy import VideoFileClip , ImageClip , AudioFileClip , CompositeVideoClip
+from moviepy import *
 import cv2
 import numpy as np    
 import srt
@@ -33,7 +33,7 @@ class VideoProcess:
         #sync the audio and subtitles if they are not same as the video length
         if speed_factor != 1:
             #adjusting audio
-            translated_audio = speedx(translated_audio, factor = speed_factor)
+            translated_audio = sp(translated_audio, factor = speed_factor)
             
             #adjusting subtitles
             with open(self.translated_subtitle_file, 'r') as file:
@@ -56,14 +56,14 @@ class VideoProcess:
         for sub in subtitles:
             img = np.zeros((100, video.size[0], 3), dtype=np.uint8)
             cv2.putText(img, sub.content, (30, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-            clip = ImageClip(img).set_duration(sub.end.total_seconds() - sub.start.total_seconds()).set_start(sub.start.total_seconds())
+            clip = ImageClip(img).with_duration(sub.end.total_seconds() - sub.start.total_seconds()).set_start(sub.start.total_seconds())
             subtitle_clips.append(clip)
 
             #Adding subtitles in the video
             video_with_subtitle = CompositeVideoClip([video] + subtitle_clips)
                 
             #Replacing the original audio in the video with translated audio
-            video_with_audio = video_with_subtitle.set_audio(translated_audio)
+            video_with_audio = video_with_subtitle.with_audio(translated_audio)
                 
             #Final output video
             final_video_file = os.path.join(self.translated_video_dir_path, f"{self.title}.mp4")

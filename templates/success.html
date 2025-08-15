@@ -1,8 +1,4 @@
-{% extends "base.html" %}
-
-{% block title %}Success - DubMaster{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Success - DubBuddy{% endblock %} {% block content %}
 <div class="success-container">
   <h1>Success Page</h1>
   <p>Hooray, Your video has started processing!</p>
@@ -11,11 +7,11 @@
 <div id="spinner">
   <div id="page">
     <div id="container">
-        <div id="ring"></div>
-        <div id="ring"></div>
-        <div id="ring"></div>
-        <div id="ring"></div>
-        <div id="h3">loading</div>
+      <div id="ring"></div>
+      <div id="ring"></div>
+      <div id="ring"></div>
+      <div id="ring"></div>
+      <div id="h3">loading</div>
     </div>
   </div>
 </div>
@@ -24,11 +20,11 @@
   <video id="translated-video" width="720" controls></video>
 </div>
 
-<form class="download-video" id="download-container"method="get" action="/download-video">
+<form class="download-video" id="download-container" method="get" action="/download-video">
   <button id="download-button" class="button">
     <span class="button-content">Download </span>
   </button>
 </form>
 
-<script type="module" src="static/scripts/success.js"> </script>
+<script type="module" src="static/scripts/success.js"></script>
 {% endblock %}

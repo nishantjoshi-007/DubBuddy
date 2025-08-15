@@ -1,12 +1,11 @@
-from TTS.api import TTS
-import torch
+from fish_audio_sdk import Session, TTSRequest, ReferenceAudio
 import os
 from ..util.util import convert_audio_to_wav
-
-#encoding - import sys
-#sys.stdout.reconfigure(encoding="utf-8")
+from dotenv import load_dotenv
 
 class TextToSpeech:
+    
+    load_dotenv()  # Load environment variables from .env file
 
     #initialize and define paths
     def __init__(self, translated_text_file:str, audio_file:str, to_lang_code:str, unique_dir_path:str, title:str, tos_check:bool) -> None:
@@ -22,7 +21,11 @@ class TextToSpeech:
         self.translated_audio_dir_path = os.path.join(self.unique_dir_path, "translated_audio")
         os.makedirs(self.translated_audio_dir_path, exist_ok=True) # Create the directory for translated audio
 
-
+        # Initialize Fish Audio session with your API key
+        api_key = os.getenv("FISH_API_KEY")
+        if not api_key:
+            raise ValueError("API key for Fish Audio is not set in the environment variables.") 
+        self.session = Session(api_key)  # Replace with your actual API key
 
     
     #text to speech function
@@ -47,37 +50,31 @@ class TextToSpeech:
             print("Error converting audio to wav format.")
             return
 
-
-        #get the model, start text to speech with original voice and translated text
         try:
-            text_to_speech_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}.wav")
             translated_audio_file = os.path.join(self.translated_audio_dir_path, f"{self.title}finalaudio.wav")
 
-            if torch.cuda.is_available():
-                device = torch.device('cuda')
-            else:
-                device = torch.device('cpu')
+            # Read the reference audio file
+            with open(wav_audio_file, "rb") as audio_file:
+                audio_data = audio_file.read()
 
-            # Text to speech
-            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False).to(device)
-            tts.tts_to_file(
-                text = translated_text,
-                file_path = text_to_speech_audio_file,
-                speaker_wav = wav_audio_file,
-                language = self.to_lang_code
-            )
-            print(f"Text-to-speech conversion completed. Audio saved to {text_to_speech_audio_file}")
+            # Use Fish Audio TTS with voice cloning
+            # This combines both text-to-speech and voice cloning in one call
+            with open(translated_audio_file, "wb") as output_file:
+                for chunk in self.session.tts(TTSRequest(
+                    text=translated_text,
+                    references=[
+                        ReferenceAudio(
+                            audio=audio_data,
+                            text=""  # Leave empty for automatic transcription
+                        )
+                    ]
+                ),
+                    backend="speech-1.6"):
+                    output_file.write(chunk)
 
-            # Voice conversion
-            tts_vc = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False).to(device)
-            tts_vc.voice_conversion_to_file(
-                source_wav = text_to_speech_audio_file, 
-                target_wav = wav_audio_file, 
-                file_path = translated_audio_file
-            )
-            print(f"Voice conversion completed. Audio saved to {translated_audio_file}")
-
+            print(f"Fish Audio TTS with voice cloning completed. Audio saved to {translated_audio_file}")
             return translated_audio_file
 
         except Exception as e:
-            print(f"Error during Text to Speech conversion: {e}")
+            print(f"Error during Fish Audio TTS conversion: {e}")
+            return None

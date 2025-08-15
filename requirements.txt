@@ -1,6 +1,6 @@
 argos-translate-files
 argostranslate
-fastapi
+fastapi[standard]
 ffmpeg-python
 Jinja2
 moviepy
@@ -11,4 +11,7 @@ pydub
 srt
 uvicorn
 whisper-timestamped
-yt-dlp
+yt-dlp[default]
+ffmpeg-python
+fish-audio-sdk
+python-dotenv
