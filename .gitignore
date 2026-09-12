@@ -1,12 +1,27 @@
-.vscode/
+# private working documents
+plan.md
+learning-harness.md
 
+# python
 __pycache__/
 *.pyc
-
+.venv/
 venv/
+.ruff_cache/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
 
-config.md
-
-dubbuddy.pem
-
+# runtime
+data/
 .env
+*.log
+
+# editors
+.vscode/
+.idea/
+
+# legacy
+config.md
+dubbuddy.pem

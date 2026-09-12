@@ -1,0 +1,12 @@
+/* Phase 0 placeholder; WP-E owns this file. Theme variables are the only thing the toggle relies on. */
+:root { --background-color: #fff; --text-color: #111; --primary-color: #007bff; }
+body.dark-theme { --background-color: #1f2023; --text-color: #e6e6e6; --primary-color: #4ea1ff; }
+@media (prefers-color-scheme: dark) { body:not(.light-theme) { --background-color: #1f2023; --text-color: #e6e6e6; --primary-color: #4ea1ff; } }
+@import url(toggle.css);
+body { margin: 0; padding: 0 1rem; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--background-color); color: var(--text-color); }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--primary-color); }
+.header nav { display: flex; align-items: center; gap: 1rem; }
+.brand { display: flex; align-items: center; gap: .5rem; text-decoration: none; color: inherit; font-size: 1.4rem; }
+.main { max-width: 56rem; margin: 2rem auto; }
+.footer { text-align: center; padding: 1rem 0; border-top: 1px solid var(--primary-color); margin-top: 2rem; font-size: .9rem; }
+a { color: var(--primary-color); }

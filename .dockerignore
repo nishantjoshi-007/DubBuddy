@@ -1,0 +1,11 @@
+.git
+.venv
+venv
+data
+.env
+*.log
+plan.md
+learning-harness.md
+__pycache__
+.pytest_cache
+.ruff_cache
