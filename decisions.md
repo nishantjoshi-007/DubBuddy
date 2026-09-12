@@ -51,6 +51,7 @@ N-18  "DubBuddy" is out; a new name is chosen from D-38. `learning-harness.md` s
 N-19  The name is **Respeak** (package `respeak`, CLI `respeak`, page title "Respeak").
 N-20  `plan.md` is a private working document and is not pushed; `decisions.md` and `flow.md` are committed.
 N-21  Go-ahead for Phase 0 and Phase 1: Claude orchestrates, subagents (Opus where it matters) execute tasks.
+N-22  Clone-and-run only. No PyPI package. (2026-09-12)
 ```
 
 ---
@@ -97,7 +98,7 @@ Chosen: `YouTubeDownloader`, `inquiries` (gone anyway), `separate_thread` gone w
 
 **D-22 Install path for users** — accepted (N-14)
 Chosen: `docker compose up` is the headline; `uv sync` + `uv run` right below it for contributors and for day-to-day development.
-Why: the image bundles ffmpeg, deno, fonts and model caches; developers never need Docker.
+Why: the image bundles ffmpeg, deno, fonts and model caches; developers never need Docker. No PyPI release (D-43).
 
 ## 2.2 Pipeline
 
@@ -275,6 +276,16 @@ flow.md              public: architecture, old vs new                 → commit
 **D-40 What happens to the old pipeline code** — Made (Claude)
 Deleted from `main` in Phase 0 rather than moved. Every file stays readable with `git show dev:src/<name>.py`, flow.md Part A documents its behaviour, and nothing in the new system imports it. Keeping dead modules on disk would only tempt an import of moviepy or Fish.
 
+**D-43 Distribution is clone-and-run only** — Made (Nishant, N-22)
+```text
+how people get it     git clone → `docker compose up`  or  `uv sync` + `uv run`
+not done              no PyPI package, no `pip install respeak`, no pipx
+why                   a hobby project with no maintenance promise; publishing adds a name to hold, a release
+                      process and an expectation of updates, and changes nothing about security exposure
+pyproject.toml stays  it is what uv reads to lock and install dependencies (the modern requirements.txt)
+respeak/ stays        a folder Python imports; it has nothing to do with publishing
+```
+
 **D-42 Review before closing a phase** — Made (Claude)
 After the Phase 1 work packages landed, a read-only reviewer agent examined the diff against flow.md Part B and the old system's defect list, confirming each finding by running it. It found ten issues the 127 tests did not: heavy imports reaching the event loop through `health`/`backends`/`resolved_device()`, the sweeper dying permanently on one bad status.json and able to delete a job running longer than 6 h, `fit()` stretching short clips by 25 %, dropped dub tails reported nowhere, `_pipeline_run_fn` swallowing every ImportError, VP9/Opus copied into `out.mp4`, the upload cap enforced only after Starlette spooled the body, yt-dlp's generic extractor reachable for internal URLs (SSRF), and blocking file I/O in an async route. All were fixed before the phase closed (FIX-1). Rule going forward: every phase ends with an independent review pass, and the reviewer must reproduce, not guess.
 
@@ -409,4 +420,5 @@ DATE        WHAT CHANGED
 2026-09-11  N-19 Respeak chosen; N-20 plan.md private; N-21 go-ahead; D-39…D-41; flow.md split into Part A (old) / Part B (new contract)
 2026-09-11  Phase 0 closed: package `respeak/`, uv.lock on 3.14 with CPU torch, D-25 adjusted (CUDA post-step)
 2026-09-12  Phase 1: WP-A…F landed (127 tests), live acceptance passed (YouTube en→es 28 s, upload en→fr 18 s, queue verified), review D-42, fixes F1–F9
+2026-09-12  N-22 / D-43: clone-and-run only, no PyPI
 ```
