@@ -1,12 +1,413 @@
-/* Phase 0 placeholder; WP-E owns this file. Theme variables are the only thing the toggle relies on. */
-:root { --background-color: #fff; --text-color: #111; --primary-color: #007bff; }
-body.dark-theme { --background-color: #1f2023; --text-color: #e6e6e6; --primary-color: #4ea1ff; }
-@media (prefers-color-scheme: dark) { body:not(.light-theme) { --background-color: #1f2023; --text-color: #e6e6e6; --primary-color: #4ea1ff; } }
+/* Respeak — Phase 1 structure CSS (flow.md B6, decisions D-28/D-34).
+   Deliberately plain: system fonts, one column, no framework. The visual redesign is Phase 3.
+   @import must come first in a stylesheet, so the toggle's styles are pulled in before anything else. */
 @import url(toggle.css);
-body { margin: 0; padding: 0 1rem; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--background-color); color: var(--text-color); }
-.header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--primary-color); }
-.header nav { display: flex; align-items: center; gap: 1rem; }
-.brand { display: flex; align-items: center; gap: .5rem; text-decoration: none; color: inherit; font-size: 1.4rem; }
-.main { max-width: 56rem; margin: 2rem auto; }
-.footer { text-align: center; padding: 1rem 0; border-top: 1px solid var(--primary-color); margin-top: 2rem; font-size: .9rem; }
-a { color: var(--primary-color); }
+
+/* Theme variables. The toggle (toggle.js) flips body.dark-theme / body.light-theme;
+   with neither class set, prefers-color-scheme decides. */
+:root {
+  --background-color: #fff;
+  --text-color: #111;
+  --primary-color: #0b63ce;
+  --surface-color: #f5f6f8;
+  --border-color: #d5d9e0;
+  --muted-color: #58606e;
+  --danger-color: #a4231c;
+  --danger-surface: #fdeceb;
+  --accent-color: #1a7f4b;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not(.light-theme) {
+    --background-color: #1f2023;
+    --text-color: #e6e6e6;
+    --primary-color: #4ea1ff;
+    --surface-color: #26282d;
+    --border-color: #3b3e45;
+    --muted-color: #a3a9b4;
+    --danger-color: #ff9a90;
+    --danger-surface: #38211f;
+    --accent-color: #6ee7a5;
+    color-scheme: dark;
+  }
+}
+
+body.dark-theme {
+  --background-color: #1f2023;
+  --text-color: #e6e6e6;
+  --primary-color: #4ea1ff;
+  --surface-color: #26282d;
+  --border-color: #3b3e45;
+  --muted-color: #a3a9b4;
+  --danger-color: #ff9a90;
+  --danger-surface: #38211f;
+  --accent-color: #6ee7a5;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  padding: 0 1rem;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  background: var(--background-color);
+  color: var(--text-color);
+}
+
+a {
+  color: var(--primary-color);
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+/* ---------- chrome ---------- */
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border-color);
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.header nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: inherit;
+  font-size: 1.4rem;
+}
+
+.main {
+  max-width: 56rem;
+  margin: 2rem auto;
+}
+
+.footer {
+  max-width: 56rem;
+  margin: 2rem auto 0;
+  text-align: center;
+  padding: 1rem 0;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  color: var(--muted-color);
+}
+
+/* ---------- panels ---------- */
+
+.panel {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  padding: 1.5rem;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.lede {
+  margin: 0 0 1.5rem;
+  color: var(--muted-color);
+}
+
+/* ---------- form ---------- */
+
+#job-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tab {
+  flex: 1 1 10rem;
+  padding: 0.6rem 1rem;
+  font: inherit;
+  color: var(--text-color);
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.tab.is-active {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+
+.field {
+  min-width: 0;
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.control {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  color: var(--text-color);
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+}
+
+.control:focus-visible,
+.tab:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.advanced {
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--background-color);
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.advanced[open] summary {
+  margin-bottom: 0.75rem;
+}
+
+.hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted-color);
+}
+
+.submit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.7rem 1.3rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 0.4rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button[disabled],
+.button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.rights {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted-color);
+}
+
+.alert {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--danger-color);
+  border-radius: 0.4rem;
+  background: var(--danger-surface);
+  color: var(--danger-color);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- job view ---------- */
+
+.job-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.badge {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-color);
+  background: var(--background-color);
+}
+
+.badge[data-state="done"] {
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.badge[data-state="failed"] {
+  color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.job-meta {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--muted-color);
+  overflow-wrap: anywhere;
+}
+
+.progress {
+  height: 0.6rem;
+  border-radius: 0.3rem;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  width: 0;
+  background: var(--primary-color);
+  transition: width 0.4s ease;
+}
+
+.progress.is-failed .progress__fill {
+  background: var(--danger-color);
+}
+
+.status-line {
+  margin: 0.5rem 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--muted-color);
+}
+
+.steps {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+  color: var(--muted-color);
+}
+
+.step__marker {
+  flex: 0 0 1.25rem;
+  text-align: center;
+}
+
+.step.is-done {
+  color: var(--text-color);
+}
+
+.step.is-done .step__marker {
+  color: var(--accent-color);
+}
+
+.step.is-current {
+  color: var(--text-color);
+  font-weight: 600;
+  background: var(--background-color);
+}
+
+.step.is-failed {
+  color: var(--danger-color);
+  font-weight: 600;
+  background: var(--danger-surface);
+}
+
+.output {
+  margin: 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.video {
+  width: 100%;
+  border-radius: 0.4rem;
+  background: #000;
+}
+
+@media (max-width: 30rem) {
+  .panel {
+    padding: 1rem;
+  }
+
+  .tab {
+    flex: 1 1 100%;
+  }
+
+  .button {
+    width: 100%;
+    text-align: center;
+  }
+}

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Respeak</title>
+  <meta name="description" content="Dub a video into another language: transcribe, translate, re-voice, subtitle, mux." />
   <link rel="icon" type="image/x-icon" href="/static/images/logo.ico" />
   <link rel="stylesheet" href="/static/app.css" />
 </head>
@@ -15,11 +16,103 @@
       {% include "toggle.html" %}
     </nav>
   </header>
+
   <main class="main">
-    <!-- Phase 0 placeholder. WP-E replaces this page with the single-page UI described in flow.md B6. -->
-    <p class="notice">Respeak is being rebuilt. The job form arrives in Phase 1.</p>
+    <noscript>
+      <p class="alert">Respeak needs JavaScript: the page submits the job and polls its progress in the browser.</p>
+    </noscript>
+
+    <!-- Job form (flow.md B6). Hidden once a job is running on this page. -->
+    <section class="panel" id="form-panel">
+      <h1 class="title">Dub a video into another language</h1>
+      <p class="lede">Respeak transcribes the speech, translates it, speaks it in the target language and puts it back on the video.</p>
+
+      <form id="job-form" novalidate>
+        <input type="hidden" name="source_type" id="source-type" value="youtube" />
+
+        <div class="tabs" role="tablist" aria-label="Video source">
+          <button type="button" class="tab is-active" id="tab-youtube" role="tab" aria-selected="true"
+                  aria-controls="source-youtube" data-source="youtube">YouTube URL</button>
+          <button type="button" class="tab" id="tab-upload" role="tab" aria-selected="false"
+                  aria-controls="source-upload" data-source="upload" hidden>Upload file</button>
+        </div>
+
+        <div class="source" id="source-youtube" role="tabpanel" aria-labelledby="tab-youtube">
+          <label class="label" for="url">Video URL</label>
+          <input class="control" type="url" id="url" name="url" autocomplete="off" spellcheck="false"
+                 placeholder="https://www.youtube.com/watch?v=..." />
+        </div>
+
+        <div class="source" id="source-upload" role="tabpanel" aria-labelledby="tab-upload" hidden>
+          <label class="label" for="file">Video file</label>
+          <input class="control" type="file" id="file" name="file" accept="video/*" disabled />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="label" for="to-lang">Dub into</label>
+            <select class="control" id="to-lang" name="to_lang" required></select>
+          </div>
+          <div class="field" id="backend-field" hidden>
+            <label class="label" for="backend">Voice engine</label>
+            <select class="control" id="backend" name="backend"></select>
+          </div>
+        </div>
+
+        <label class="checkbox" for="burn-subtitles">
+          <input type="checkbox" id="burn-subtitles" name="burn_subtitles" checked />
+          <span>Burn subtitles into the video</span>
+        </label>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="field">
+            <label class="label" for="from-lang">Language spoken in the video</label>
+            <select class="control" id="from-lang" name="from_lang">
+              <option value="">Auto-detect</option>
+            </select>
+            <p class="hint">Leave this on auto-detect unless the detected language comes out wrong.</p>
+          </div>
+        </details>
+
+        <p class="alert" id="form-error" role="alert" hidden></p>
+
+        <div class="submit-row">
+          <button class="button" type="submit" id="submit-button">Start dubbing</button>
+          <p class="rights">By submitting you confirm you have the right to use this video.</p>
+        </div>
+      </form>
+    </section>
+
+    <!-- Result area: step list, progress, errors, then the finished video. -->
+    <section class="panel" id="result-panel" hidden>
+      <div class="job-head">
+        <h1 class="title" id="job-title">Preparing your job</h1>
+        <span class="badge" id="job-state">queued</span>
+      </div>
+      <p class="job-meta" id="job-meta"></p>
+
+      <div class="progress" id="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="0" aria-label="Job progress">
+        <div class="progress__fill" id="progress-fill"></div>
+      </div>
+      <p class="status-line" id="status-line" aria-live="polite">Waiting for the job to start…</p>
+
+      <ol class="steps" id="step-list"></ol>
+
+      <p class="alert" id="job-error" role="alert" hidden></p>
+
+      <div class="output" id="output" hidden>
+        <video class="video" id="output-video" controls preload="metadata" playsinline></video>
+        <p><a class="button" id="download-link" download>Download the dubbed video</a></p>
+      </div>
+
+      <p><a href="/" id="new-job">Dub another video</a></p>
+    </section>
   </main>
+
   <footer class="footer">Respeak · MIT licensed · <a href="https://github.com/nishantjoshi-007/DubBuddy" rel="noopener">source</a></footer>
+
   <script type="module" src="/static/toggle.js"></script>
   <script type="module" src="/static/app.js"></script>
 </body>
