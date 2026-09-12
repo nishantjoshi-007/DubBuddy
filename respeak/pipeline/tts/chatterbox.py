@@ -39,13 +39,20 @@ def _model_class() -> Any:
 
 
 def _import_problem() -> str | None:
-    """None when chatterbox can be used, otherwise a one-line reason for the UI."""
-    if importlib.util.find_spec("chatterbox") is None:
-        return NOT_INSTALLED_REASON
+    """None when chatterbox can be used, otherwise a one-line reason for the UI.
+
+    This answers `GET /api/backends`, so it must stay cheap: it only looks the module up, it never
+    imports `chatterbox.mtl_tts` itself (that pulls torch and seconds of model code). The real
+    import happens in `_load()`, in the worker thread.
+    """
     try:
-        _model_class()
+        spec = importlib.util.find_spec("chatterbox.mtl_tts")
+    except ModuleNotFoundError:  # the `chatterbox` parent package itself is absent
+        return NOT_INSTALLED_REASON
     except Exception as exc:  # pragma: no cover - needs a broken `clone` extra
-        return f"{NOT_INSTALLED_REASON} (the package is present but `chatterbox.mtl_tts` failed: {exc})"
+        return f"{NOT_INSTALLED_REASON} (the package is present but not importable: {exc})"
+    if spec is None:
+        return NOT_INSTALLED_REASON
     return None
 
 

@@ -70,6 +70,22 @@ const dom = {
   download: el("download-link"),
 };
 
+// A notice (not an error): the job succeeded, but part of the dub did not fit the video.
+// Built here rather than in the template so the stylesheet stays the error panel's only owner.
+dom.jobWarnings = (() => {
+  const node = document.createElement("p");
+  node.id = "job-warnings";
+  node.className = "notice";
+  node.setAttribute("role", "status");
+  node.hidden = true;
+  node.style.cssText =
+    "margin:0;padding:0.7rem 0.9rem;border:1px solid var(--accent-color);" +
+    "border-radius:0.4rem;background:var(--background-color);color:var(--text-color);" +
+    "overflow-wrap:anywhere;";
+  dom.jobError.parentNode.insertBefore(node, dom.jobError);
+  return node;
+})();
+
 const state = {
   codeToName: Object.assign({}, FALLBACK_NAMES),
   backends: [], // installed backends only: {name, languages: [...], cloning}
@@ -370,6 +386,15 @@ function renderProgress(job) {
   else setText(dom.statusLine, `${stepLabel || "Working"}… ${percent}%`);
 }
 
+/** Warnings are things the user should know about a job that still worked (e.g. a cut-off tail). */
+function renderWarnings(job) {
+  const messages = Array.isArray(job.warnings)
+    ? job.warnings.filter((item) => typeof item === "string" && item.trim())
+    : [];
+  setText(dom.jobWarnings, messages.join(" "));
+  show(dom.jobWarnings, messages.length > 0);
+}
+
 function renderJob(job) {
   setText(dom.jobTitle, job.title || "Dubbing your video");
   setText(dom.jobState, job.state || "queued");
@@ -377,6 +402,7 @@ function renderJob(job) {
   renderMeta(job);
   renderProgress(job);
   renderSteps(job);
+  renderWarnings(job);
 
   if (job.state === "failed") {
     stopPolling();

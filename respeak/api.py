@@ -3,6 +3,9 @@
 Every route here is cheap: the job routes read or write one small file and return. The work happens in
 :class:`respeak.jobs.JobRunner`'s thread pool, never on the event loop.
 
+The routes are plain ``def``, not ``async def``, on purpose: FastAPI then runs them in its threadpool,
+so reading a status file, asking torch about CUDA or writing a 500 MB upload never blocks the loop.
+
 The router carries full paths (``/api/…`` plus the one root-level ``POST /jobs``) so that ``main.py``
 can include it unchanged.
 """
@@ -12,17 +15,19 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import __version__
 from .config import Settings, get_settings
 from .jobs import JobStore, get_runner, get_store
 from .lang_codes import NAME_TO_CODE, SOURCE_LANGUAGES
+from .pipeline.inputs import InputError, check_public_url
 from .pipeline.tts import available_backends
 
 log = logging.getLogger(__name__)
@@ -31,6 +36,10 @@ router = APIRouter()
 
 UPLOAD_FILENAME = "upload.bin"
 UPLOAD_CHUNK_BYTES = 1024 * 1024
+#: What the multipart envelope around the file itself may reasonably add (headers, other fields).
+FORM_OVERHEAD_BYTES = 1024 * 1024
+#: The one route whose body may be huge; the size guard only looks at this path.
+CREATE_JOB_PATH = "/jobs"
 _TRUE = {"true", "1", "on", "yes"}
 _FALSE = {"false", "0", "off", "no"}
 _AUTO = {"", "auto", "none", "null"}
@@ -72,7 +81,7 @@ def safe_name(raw: str | None, fallback: str = "") -> str:
 
 
 @router.get("/api/health")
-async def health() -> dict[str, Any]:
+def health() -> dict[str, Any]:
     settings = get_settings()
     return {
         "status": "ok",
@@ -88,7 +97,7 @@ async def health() -> dict[str, Any]:
 
 
 @router.get("/api/backends")
-async def backends() -> dict[str, Any]:
+def backends() -> dict[str, Any]:
     settings = get_settings()
     infos = available_backends(settings)
     return {
@@ -165,6 +174,11 @@ def _validate(
         parsed = urlparse(link)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise _Rejected(400, "the URL must start with http:// or https://")
+        try:
+            # yt-dlp's generic extractor would happily fetch http://169.254.169.254/… for us.
+            check_public_url(link)
+        except InputError as exc:
+            raise _Rejected(400, str(exc)) from exc
     else:
         if not settings.allow_uploads:
             raise _Rejected(400, "file uploads are disabled on this server")
@@ -177,13 +191,19 @@ def _validate(
     return source_info, options
 
 
-async def _save_upload(file: UploadFile, dest: Path, max_upload_mb: int) -> int:
-    """Stream the upload to ``dest`` in chunks, enforcing MAX_UPLOAD_MB (decisions.md D-26)."""
+def _save_upload(file: UploadFile, dest: Path, max_upload_mb: int) -> int:
+    """Copy the upload to ``dest`` in chunks, enforcing MAX_UPLOAD_MB (decisions.md D-26).
+
+    Synchronous on purpose: the route is a plain ``def``, so this runs in FastAPI's threadpool and
+    half a gigabyte of disk writes never sits on the event loop.
+    """
     limit = max(1, int(max_upload_mb)) * 1024 * 1024
     written = 0
+    spooled = file.file  # the SpooledTemporaryFile starlette already parsed the multipart body into
+    spooled.seek(0)
     with open(dest, "wb") as handle:
         while True:
-            chunk = await file.read(UPLOAD_CHUNK_BYTES)
+            chunk = spooled.read(UPLOAD_CHUNK_BYTES)
             if not chunk:
                 break
             written += len(chunk)
@@ -195,8 +215,37 @@ async def _save_upload(file: UploadFile, dest: Path, max_upload_mb: int) -> int:
     return written
 
 
+async def limit_upload_size(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Refuse an over-large ``POST /jobs`` from its ``Content-Length``, before the body is spooled.
+
+    Without this, starlette parses (and writes to a temp file) the whole multipart body before the
+    route ever sees it, so a 4 GB upload costs 4 GB of disk before the 413. Bodies without a
+    ``Content-Length`` (chunked) are still caught by the streamed check in :func:`_save_upload`.
+    """
+    if request.method == "POST" and request.url.path == CREATE_JOB_PATH:
+        settings = get_settings()
+        limit = max(1, int(settings.max_upload_mb)) * 1024 * 1024 + FORM_OVERHEAD_BYTES
+        declared = _content_length(request)
+        if declared is not None and declared > limit:
+            log.info("refusing a %d byte POST /jobs: over the %d MB limit", declared, settings.max_upload_mb)
+            return _error(413, f"the upload is larger than the {settings.max_upload_mb} MB limit")
+    return await call_next(request)
+
+
+def _content_length(request: Request) -> int | None:
+    raw = request.headers.get("content-length")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 @router.post("/jobs", status_code=201)
-async def create_job(
+def create_job(
     source_type: Annotated[str | None, Form()] = None,
     url: Annotated[str | None, Form()] = None,
     to_lang: Annotated[str | None, Form()] = None,
@@ -219,7 +268,7 @@ async def create_job(
     if source["type"] == "upload":
         assert file is not None  # _validate guarantees it
         try:
-            await _save_upload(file, store.path(job_id) / UPLOAD_FILENAME, settings.max_upload_mb)
+            _save_upload(file, store.path(job_id) / UPLOAD_FILENAME, settings.max_upload_mb)
         except _Rejected as exc:
             store.delete(job_id)
             return _error(exc.status_code, exc.message)
@@ -282,4 +331,4 @@ def job_download(job_id: str) -> Any:
     )
 
 
-__all__ = ["UPLOAD_FILENAME", "router", "safe_name"]
+__all__ = ["UPLOAD_FILENAME", "limit_upload_size", "router", "safe_name"]

@@ -138,9 +138,7 @@ def video_streams(info: dict[str, Any]) -> list[dict[str, Any]]:
 
 def audio_streams(info: dict[str, Any]) -> list[dict[str, Any]]:
     """Audio streams from a `probe()` dict."""
-    return [
-        s for s in (info.get("streams") or []) if isinstance(s, dict) and s.get("codec_type") == "audio"
-    ]
+    return [s for s in (info.get("streams") or []) if isinstance(s, dict) and s.get("codec_type") == "audio"]
 
 
 def _split_binary(args: list[str]) -> tuple[str, list[str]]:

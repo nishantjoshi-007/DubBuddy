@@ -41,8 +41,14 @@ def make_video(
 ) -> Path:
     """A testsrc2 video with a sine tone, written with ffmpeg (`mpeg4` so `-c:v copy` is provable)."""
     args = [
-        "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=25:duration={seconds}",
-        "-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=44100:duration={seconds}",
+        "-f",
+        "lavfi",
+        "-i",
+        f"testsrc2=size={size}:rate=25:duration={seconds}",
+        "-f",
+        "lavfi",
+        "-i",
+        f"sine=frequency=440:sample_rate=44100:duration={seconds}",
     ]
     if audio_filter:
         args += ["-af", audio_filter]
@@ -57,8 +63,15 @@ def make_video(
 def make_tone(path: Path, seconds: float, freq: int = 440, rate: int = 24_000) -> Path:
     ffmpeg.run(
         [
-            "-f", "lavfi", "-i", f"sine=frequency={freq}:sample_rate={rate}:duration={seconds}",
-            "-ac", "1", "-c:a", "pcm_s16le", str(path),
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency={freq}:sample_rate={rate}:duration={seconds}",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(path),
         ]
     )
     return path
@@ -92,8 +105,17 @@ def gray_frame(path: Path, at: float, raw: Path) -> np.ndarray:
     probe = ffmpeg.probe_summary(path)
     ffmpeg.run(
         [
-            "-ss", f"{at:.3f}", "-i", str(path), "-frames:v", "1",
-            "-pix_fmt", "gray", "-f", "rawvideo", str(raw),
+            "-ss",
+            f"{at:.3f}",
+            "-i",
+            str(path),
+            "-frames:v",
+            "1",
+            "-pix_fmt",
+            "gray",
+            "-f",
+            "rawvideo",
+            str(raw),
         ]
     )
     return np.fromfile(raw, dtype=np.uint8).reshape(probe.height, probe.width)
@@ -223,6 +245,127 @@ def test_remux_turns_an_odd_container_into_source_mp4(tmp_path: Path, settings: 
     assert probe.has_video and probe.duration == pytest.approx(3.0, abs=0.25)
 
 
+def make_webm(path: Path, seconds: float = 2.0) -> Path:
+    """A tiny VP9 + Opus WebM — exactly what `bestvideo+bestaudio` hands back for many videos."""
+    ffmpeg.run(
+        [
+            "-f",
+            "lavfi",
+            "-i",
+            f"testsrc2=size=160x120:rate=10:duration={seconds}",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency=440:sample_rate=48000:duration={seconds}",
+            "-c:v",
+            "libvpx-vp9",
+            "-b:v",
+            "60k",
+            "-deadline",
+            "realtime",
+            "-cpu-used",
+            "8",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "32k",
+            "-shortest",
+            str(path),
+        ]
+    )
+    return path
+
+
+def test_ensure_mp4_codecs_reencodes_vp9_and_opus(tmp_path: Path) -> None:
+    webm = make_webm(tmp_path / "vp9.webm")
+    assert codecs(webm)["video"] == ["vp9"] and codecs(webm)["audio"] == ["opus"]
+    fixed = inputs.ensure_mp4_codecs(webm)
+    assert fixed != webm and fixed.suffix == ".mp4"
+    assert codecs(fixed)["video"] == ["h264"]
+    assert codecs(fixed)["audio"] == ["aac"]
+
+
+def test_ensure_mp4_codecs_leaves_an_h264_file_alone(sample_video: Path, tmp_path: Path) -> None:
+    h264 = tmp_path / "already.mp4"
+    ffmpeg.run(["-i", str(sample_video), "-t", "1", "-c:v", "libx264", "-c:a", "aac", str(h264)])
+    before = h264.stat().st_mtime_ns
+    assert inputs.ensure_mp4_codecs(h264) == h264
+    assert h264.stat().st_mtime_ns == before  # not rewritten
+
+
+def test_remux_of_a_webm_upload_yields_a_playable_mp4(tmp_path: Path) -> None:
+    """F7: a stream copy would have put VP9 + Opus inside source.mp4, and out.mp4 after it."""
+    upload = make_webm(tmp_path / "clip.webm").rename(tmp_path / "upload.bin")
+    dest = inputs.remux(upload, tmp_path / "source.mp4")
+    assert dest == tmp_path / "source.mp4"  # the caller's filename survives the re-encode
+    assert codecs(dest)["video"] == ["h264"]
+    assert codecs(dest)["audio"] == ["aac"]
+    assert sorted(p.name for p in tmp_path.glob("source*")) == ["source.mp4"]
+
+
+# --------------------------------------------------------------------------------------------------
+# inputs.py — URL safety (F9)
+# --------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/x",
+        "http://169.254.169.254/latest",
+        "http://10.0.0.5:8080/",
+        "https://192.168.1.1/admin",
+        "http://[::1]:9000/",
+        "http://0.0.0.0/",
+    ],
+)
+def test_check_public_url_rejects_addresses_inside_the_house(url: str) -> None:
+    with pytest.raises(InputError, match="private network|http"):
+        inputs.check_public_url(url)
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://example.com/x", "", "http://"])
+def test_check_public_url_rejects_non_http_urls(url: str) -> None:
+    with pytest.raises(InputError):
+        inputs.check_public_url(url)
+
+
+def test_check_public_url_accepts_a_public_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hostname is resolved, not guessed — so the test resolves it too (no network needed)."""
+    calls: list[str] = []
+
+    def fake_getaddrinfo(host: str, *args: object, **kwargs: object) -> list[tuple]:
+        calls.append(host)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("142.250.72.206", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    inputs.check_public_url(SAMPLE_URL)
+    assert calls == ["www.youtube.com"]
+
+
+def test_check_public_url_rejects_a_name_that_resolves_inwards(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The DNS-rebinding shape: a public-looking name that answers with a private address."""
+
+    def fake_getaddrinfo(host: str, *args: object, **kwargs: object) -> list[tuple]:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    with pytest.raises(InputError, match="private network"):
+        inputs.check_public_url("https://metadata.example.com/latest/meta-data/")
+
+
+def test_check_public_url_lets_an_unresolvable_name_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nothing resolves, nothing can be reached: yt-dlp reports it in its own words."""
+
+    def fake_getaddrinfo(host: str, *args: object, **kwargs: object) -> list[tuple]:
+        raise socket.gaierror("Name or service not known")
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    inputs.check_public_url("https://not-a-real-host.example/watch?v=1")
+
+
 # --------------------------------------------------------------------------------------------------
 # inputs.py — audio extraction
 # --------------------------------------------------------------------------------------------------
@@ -286,9 +429,17 @@ def test_fit_clamps_a_clip_that_is_far_too_long(tmp_path: Path) -> None:
     assert wav_info(fitted)[:2] == (24_000, 1)
 
 
-def test_fit_clamps_a_clip_that_is_far_too_short(tmp_path: Path) -> None:
+def test_fit_never_stretches_a_clip_that_is_shorter_than_its_slot(tmp_path: Path) -> None:
+    """A short clip keeps its own speed; the rest of the slot is the pause the speaker took."""
     clip = make_tone(tmp_path / "short.wav", 1.0)
-    _, seconds = audio.fit(clip, 4.0, tmp_path / "fit_lo.wav")
+    fitted, seconds = audio.fit(clip, 4.0, tmp_path / "fit_lo.wav")
+    assert seconds == pytest.approx(1.0, abs=0.05)
+    assert wav_info(fitted)[:2] == (24_000, 1)
+
+
+def test_fit_stretches_only_when_a_caller_asks_for_a_lower_bound(tmp_path: Path) -> None:
+    clip = make_tone(tmp_path / "short_lo.wav", 1.0)
+    _, seconds = audio.fit(clip, 4.0, tmp_path / "fit_lo_explicit.wav", lo=0.8)
     assert seconds == pytest.approx(1.0 / 0.8, abs=0.1)
 
 
@@ -328,7 +479,9 @@ def test_assemble_is_exactly_the_video_length(tmp_path: Path) -> None:
         [Segment(1.0, 2.0, "one"), Segment(4.0, 5.0, "two")],
         [(first, 1.0), (second, 1.0)],
     )
-    dubbed = audio.assemble(placed, 7.5, tmp_path / "dubbed.wav")
+    result = audio.assemble(placed, 7.5, tmp_path / "dubbed.wav")
+    assert (result.dropped_clips, result.dropped_seconds, result.trimmed_seconds) == (0, 0.0, 0.0)
+    dubbed = result.path
     rate, channels, seconds = wav_info(dubbed)
     assert (rate, channels) == (24_000, 1)
     assert seconds == pytest.approx(7.5, abs=0.005)
@@ -341,15 +494,35 @@ def test_assemble_is_exactly_the_video_length(tmp_path: Path) -> None:
 def test_assemble_trims_a_clip_that_runs_past_the_end(tmp_path: Path) -> None:
     clip = make_tone(tmp_path / "tail.wav", 3.0)
     placed = audio.place([Segment(1.0, 2.0, "x")], [(clip, 3.0)])
-    dubbed = audio.assemble(placed, 2.0, tmp_path / "short.wav")
-    assert wav_info(dubbed)[2] == pytest.approx(2.0, abs=0.005)
-    assert rms(dubbed, 1.1, 2.0) > 0.05
+    result = audio.assemble(placed, 2.0, tmp_path / "short.wav")
+    assert wav_info(result.path)[2] == pytest.approx(2.0, abs=0.005)
+    assert rms(result.path, 1.1, 2.0) > 0.05
+    # F5: the caller has to be able to say that 2 s of speech was cut off.
+    assert result.trimmed_seconds == pytest.approx(2.0, abs=0.01)
+    assert (result.dropped_clips, result.dropped_seconds) == (0, 0.0)
+
+
+def test_assemble_reports_clips_that_start_after_the_video_ends(tmp_path: Path) -> None:
+    inside = make_tone(tmp_path / "inside.wav", 1.0)
+    late = make_tone(tmp_path / "late.wav", 2.0, freq=660)
+    later = make_tone(tmp_path / "later.wav", 1.5, freq=880)
+    placed = audio.place(
+        [Segment(0.0, 1.0, "a"), Segment(6.0, 8.0, "b"), Segment(9.0, 10.5, "c")],
+        [(inside, 1.0), (late, 2.0), (later, 1.5)],
+    )
+    result = audio.assemble(placed, 5.0, tmp_path / "cut.wav")
+    assert result.dropped_clips == 2
+    assert result.dropped_seconds == pytest.approx(3.5, abs=0.02)
+    assert result.trimmed_seconds == 0.0
+    assert result.lost_seconds == pytest.approx(3.5, abs=0.02)
+    assert wav_info(result.path)[2] == pytest.approx(5.0, abs=0.005)
 
 
 def test_assemble_on_an_empty_timeline_is_silence(tmp_path: Path) -> None:
-    dubbed = audio.assemble([], 1.5, tmp_path / "silent.wav")
-    assert wav_info(dubbed)[2] == pytest.approx(1.5, abs=0.005)
-    assert rms(dubbed) == 0.0
+    result = audio.assemble([], 1.5, tmp_path / "silent.wav")
+    assert wav_info(result.path)[2] == pytest.approx(1.5, abs=0.005)
+    assert rms(result.path) == 0.0
+    assert result.lost_seconds == 0.0
 
 
 # --------------------------------------------------------------------------------------------------
@@ -391,9 +564,7 @@ def test_build_srt_drops_empty_cues(tmp_path: Path) -> None:
 
 
 def test_build_srt_wraps_long_lines_on_word_boundaries(tmp_path: Path) -> None:
-    long_text = (
-        "Esta es una frase muy larga que no cabe en una sola linea de subtitulo y hay que partirla"
-    )
+    long_text = "Esta es una frase muy larga que no cabe en una sola linea de subtitulo y hay que partirla"
     path = subtitles.build_srt([Cue(0.0, 4.0, long_text)], tmp_path / "wrap.srt")
     content = list(srt_lib.parse(path.read_text(encoding="utf-8")))[0].content
     lines = content.splitlines()
@@ -423,7 +594,7 @@ def dubbed(tmp_path: Path) -> Path:
         audio.place([Segment(1.0, 3.0, "hola")], [(make_tone(tmp_path / "seg.wav", 2.0), 2.0)]),
         10.0,
         tmp_path / "dubbed.wav",
-    )
+    ).path
 
 
 def test_mux_with_burn_reencodes_to_h264_and_attaches_mov_text(
@@ -440,9 +611,7 @@ def test_mux_with_burn_reencodes_to_h264_and_attaches_mov_text(
     assert ffmpeg.duration(out) == pytest.approx(10.0, abs=0.5)
 
 
-def test_mux_without_burn_copies_the_source_video(
-    sample_video: Path, dubbed: Path, tmp_path: Path
-) -> None:
+def test_mux_without_burn_copies_the_source_video(sample_video: Path, dubbed: Path, tmp_path: Path) -> None:
     subs = subtitles.build_srt([Cue(1.0, 3.0, "Hola mundo")], tmp_path / "subs.srt")
     out = mux.mux(sample_video, dubbed, subs, burn=False, lang="hi", out=tmp_path / "soft.mp4")
     streams = codecs(out)
@@ -479,9 +648,7 @@ def test_mux_burns_unicode_subtitles_from_an_awkward_path(
     assert tags["language"] == "zho"
 
 
-def test_burned_subtitles_are_drawn_near_the_bottom(
-    sample_video: Path, dubbed: Path, tmp_path: Path
-) -> None:
+def test_burned_subtitles_are_drawn_near_the_bottom(sample_video: Path, dubbed: Path, tmp_path: Path) -> None:
     """Same encode twice, once with a cue on screen: the difference must sit in the lower band."""
     visible = subtitles.build_srt([Cue(0.5, 4.0, "Hola mundo, esto es una prueba")], tmp_path / "on.srt")
     later = subtitles.build_srt([Cue(50.0, 52.0, "Hola mundo, esto es una prueba")], tmp_path / "off.srt")
@@ -491,7 +658,7 @@ def test_burned_subtitles_are_drawn_near_the_bottom(
     b = gray_frame(without, 2.0, tmp_path / "b.raw")
     difference = np.abs(a.astype(np.int16) - b.astype(np.int16))
     height = difference.shape[0]
-    bottom = float(difference[int(height * 0.75):].mean())
+    bottom = float(difference[int(height * 0.75) :].mean())
     top = float(difference[: height // 2].mean())
     assert bottom > 1.0, "no burned text found in the bottom quarter of the frame"
     assert bottom > top * 5, f"text is not bottom-positioned (bottom {bottom:.2f} vs top {top:.2f})"
@@ -523,6 +690,12 @@ def test_escape_filter_path_quotes_the_specials() -> None:
 # --------------------------------------------------------------------------------------------------
 # YouTube (network) — metadata only, never a download
 # --------------------------------------------------------------------------------------------------
+
+
+def test_probe_youtube_refuses_a_local_url_before_touching_the_network(settings: Settings) -> None:
+    """F9 defence in depth: the pipeline checks the URL again, not only api._validate."""
+    with pytest.raises(InputError, match="private network"):
+        inputs.probe_youtube("http://127.0.0.1:8000/internal.mp4", settings)
 
 
 @pytest.mark.slow

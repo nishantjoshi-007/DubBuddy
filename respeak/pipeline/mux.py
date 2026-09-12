@@ -54,6 +54,8 @@ def mux(
         args += ["-filter_complex", graph, "-map", "[v]"]
         args += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"]
     else:
+        # Safe to copy: `inputs.ensure_mp4_codecs()` has already turned anything mp4 cannot carry
+        # (a VP9/Opus WebM, say) into h264 + aac before the pipeline gets here.
         args += ["-map", "0:v:0", "-c:v", "copy"]
     args += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "160k"]
     if subs is None:

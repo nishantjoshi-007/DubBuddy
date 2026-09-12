@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     ensure_binaries()
     store = get_store(settings)
     runner = get_runner(settings, run_fn=_pipeline_run_fn())
-    sweeper = start_sweeper(store, settings)
+    sweeper = start_sweeper(store, settings, runner=runner)
     log.info(
         "respeak %s ready (device=%s, tts=%s, whisper=%s, jobs=%s)",
         __version__,
@@ -45,16 +45,25 @@ async def lifespan(app: FastAPI):
 
 
 def _pipeline_run_fn():
-    """The real pipeline once WP-F lands; until then the runner's placeholder fails jobs loudly."""
+    """The real pipeline, or None while ``respeak/pipeline/run.py`` does not exist yet.
+
+    Only that one missing module is tolerated: a broken install (no torch, no soundfile, a typo in an
+    import) must fail here, with its own traceback, instead of silently leaving every job to the
+    runner's placeholder.
+    """
     try:
         from .pipeline.run import run_job
-    except ImportError:  # pragma: no cover - only before respeak/pipeline/run.py exists
+    except ModuleNotFoundError as exc:
+        if exc.name != "respeak.pipeline.run":
+            raise
+        log.warning("respeak.pipeline.run is missing; jobs will fail until it exists")
         return None
     return run_job
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Respeak", version=__version__, lifespan=lifespan)
+    app.middleware("http")(api.limit_upload_size)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
     app.include_router(pages.router)
     app.include_router(api.router)

@@ -124,7 +124,7 @@ Chosen: burned-in via libass when the checkbox is on (D-33), plus a `mov_text` s
 Chosen defaults, all env-tunable: `MAX_VIDEO_SECONDS=900`, `MAX_UPLOAD_MB=500`, `MAX_HEIGHT=720`, `MAX_CONCURRENT_JOBS=1`, `JOB_TTL_MINUTES=60`.
 
 **D-24 Language list vs TTS coverage** — accepted (N-10)
-Chosen: `GET /api/backends` returns each installed backend with its languages; the target `<select>` is filled from the selected backend. Source languages stay at the 29 Whisper + Argos cover.
+Chosen: `GET /api/backends` returns each backend with its languages (Chatterbox lists its 23 even when not installed, with `installed: false` and a `reason`); the form offers only installed backends, and the target `<select>` is filled from the selected one. Source languages stay at the 29 Whisper + Argos cover.
 Rejected: keeping a fixed list of 16 (would promise languages the active backend cannot speak).
 
 **D-36 Translation engine** — accepted
@@ -275,6 +275,9 @@ flow.md              public: architecture, old vs new                 → commit
 **D-40 What happens to the old pipeline code** — Made (Claude)
 Deleted from `main` in Phase 0 rather than moved. Every file stays readable with `git show dev:src/<name>.py`, flow.md Part A documents its behaviour, and nothing in the new system imports it. Keeping dead modules on disk would only tempt an import of moviepy or Fish.
 
+**D-42 Review before closing a phase** — Made (Claude)
+After the Phase 1 work packages landed, a read-only reviewer agent examined the diff against flow.md Part B and the old system's defect list, confirming each finding by running it. It found ten issues the 127 tests did not: heavy imports reaching the event loop through `health`/`backends`/`resolved_device()`, the sweeper dying permanently on one bad status.json and able to delete a job running longer than 6 h, `fit()` stretching short clips by 25 %, dropped dub tails reported nowhere, `_pipeline_run_fn` swallowing every ImportError, VP9/Opus copied into `out.mp4`, the upload cap enforced only after Starlette spooled the body, yt-dlp's generic extractor reachable for internal URLs (SSRF), and blocking file I/O in an async route. All were fixed before the phase closed (FIX-1). Rule going forward: every phase ends with an independent review pass, and the reviewer must reproduce, not guess.
+
 **D-41 How the build is run** — Made (Claude, per N-21)
 ```text
 orchestrator   Claude (this session): defines contracts (flow.md Part B), assigns tasks, integrates, verifies
@@ -405,4 +408,5 @@ DATE        WHAT CHANGED
 2026-09-11  N-18: rename; D-38 shortlist checked against PyPI / GitHub / domains; learning-harness.md gitignored
 2026-09-11  N-19 Respeak chosen; N-20 plan.md private; N-21 go-ahead; D-39…D-41; flow.md split into Part A (old) / Part B (new contract)
 2026-09-11  Phase 0 closed: package `respeak/`, uv.lock on 3.14 with CPU torch, D-25 adjusted (CUDA post-step)
+2026-09-12  Phase 1: WP-A…F landed (127 tests), live acceptance passed (YouTube en→es 28 s, upload en→fr 18 s, queue verified), review D-42, fixes F1–F9
 ```

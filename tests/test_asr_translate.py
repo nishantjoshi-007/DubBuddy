@@ -96,8 +96,22 @@ def _build_speech_fixture() -> None:  # pragma: no cover - only when the committ
         return
     FIXTURES.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        [ffmpeg, "-y", "-loglevel", "error", "-i", source,
-         "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(SPEECH_WAV)],
+        [
+            ffmpeg,
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            source,
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-c:a",
+            "pcm_s16le",
+            str(SPEECH_WAV),
+        ],
         check=True,
     )
 

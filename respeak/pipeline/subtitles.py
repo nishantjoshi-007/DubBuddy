@@ -100,6 +100,6 @@ def wrap_text(text: str, *, width: int = WRAP_WIDTH, max_lines: int = MAX_LINES)
         lines = textwrap.wrap(collapsed, width=limit, break_long_words=False, break_on_hyphens=False)
     if len(lines) > max_lines:  # only reachable for text without spaces; never drop words
         head = lines[: max_lines - 1]
-        head.append(" ".join(lines[max_lines - 1:]))
+        head.append(" ".join(lines[max_lines - 1 :]))
         lines = head
     return "\n".join(lines)

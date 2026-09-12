@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+log = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -31,19 +35,32 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    #: Memoised answer of :meth:`resolved_device` (see there).
+    _device: str | None = PrivateAttr(default=None)
+
     @property
     def jobs_dir(self) -> Path:
         return self.data_dir / "jobs"
 
     def resolved_device(self) -> str:
-        """'cpu' or 'cuda'. 'auto' becomes 'cuda' only when torch can actually see a GPU."""
+        """'cpu' or 'cuda'. 'auto' becomes 'cuda' only when torch can actually see a GPU.
+
+        Importing torch and asking CUDA costs about a second, and `/api/health` calls this on every
+        request, so the answer is computed once per :class:`Settings` instance and cached.
+        """
+        if self._device is None:
+            self._device = self._detect_device()
+        return self._device
+
+    def _detect_device(self) -> str:
         if self.device != "auto":
             return self.device
         try:
             import torch
 
             return "cuda" if torch.cuda.is_available() else "cpu"
-        except Exception:
+        except Exception as exc:
+            log.info("torch could not be asked about CUDA (%s); using the CPU", exc)
             return "cpu"
 
     def limits(self) -> dict[str, int]:

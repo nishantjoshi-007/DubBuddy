@@ -306,6 +306,7 @@ cli (Phase 3)   uv run respeak dub <url-or-file> --to es
 
 ```text
 browser  ──POST /jobs (multipart: source_type, url | file, to_lang, from_lang?, backend?, burn_subtitles)──▶ api.py
+                                                        │ 413 from Content-Length before the body is parsed when it exceeds MAX_UPLOAD_MB
                                                         │ validate (400 JSON on any problem, before any download)
                                                         │ JobStore.create() → DATA_DIR/jobs/<id>/status.json {state: queued}
                                                         │ JobRunner.submit(id)         (returns immediately)
@@ -370,10 +371,10 @@ synthesize(text, lang, reference_wav: Path|None, out: Path) -> Path      writes 
 ```
 
 ### B4.1 probe
-YouTube: one `yt_dlp.extract_info(download=False)` → title, duration, id. Upload: `ffprobe`. Reject `duration > MAX_VIDEO_SECONDS`, missing video stream, or unsupported language before anything else. Writes `status.title`.
+YouTube: the host must resolve to a public address (loopback, private, link-local and reserved ranges are refused both in the API and here, because yt-dlp's generic extractor would otherwise fetch any URL the server can reach), then one `yt_dlp.extract_info(download=False)` → title, duration, id. Upload: `ffprobe`. Reject `duration > MAX_VIDEO_SECONDS`, missing video stream, or unsupported language before anything else. Writes `status.title`.
 
 ### B4.2 fetch
-YouTube: `bestvideo[height<=MAX_HEIGHT][ext=mp4]+bestaudio[ext=m4a]/best[height<=MAX_HEIGHT]` merged → `source.mp4`; `deno` on PATH; `YTDLP_COOKIES_FILE` when set. Upload: `upload.bin` → re-muxed `source.mp4`. Then `ffmpeg` → `source.wav` (16 kHz mono) and `reference.wav` (first ≤ 30 s of speech-bearing audio, 24 kHz).
+YouTube: `bestvideo[height<=MAX_HEIGHT][ext=mp4]+bestaudio[ext=m4a]/best[height<=MAX_HEIGHT]` merged → `source.mp4`; `deno` on PATH; `YTDLP_COOKIES_FILE` when set. Upload: `upload.bin` → re-muxed `source.mp4`. The result is checked with ffprobe and re-encoded to h264 + aac if a WebM/VP9/Opus stream was copied through (so `-c:v copy` in the mux can never leak non-MP4 codecs into `out.mp4`). Then `ffmpeg` → `source.wav` (16 kHz mono) and `reference.wav` (loudest ≤ 30 s window, 24 kHz).
 
 ### B4.3 transcribe
 faster-whisper `WhisperModel(WHISPER_MODEL, device, compute_type)`; `language = from_lang or None`; `beam_size=5`, `word_timestamps=True`, `vad_filter=True`. Returns `Transcript`. Writes `status.detected_language`.
@@ -385,7 +386,7 @@ Argos. If `src != en` install `src→en`; if `dst != en` install `en→dst`; obt
 `backend.synthesize(text_i, dst, reference_wav if backend.cloning else None, seg_i.wav)` per segment.
 
 ### B4.6 fit
-Per segment: slot = `seg.end - seg.start`; factor = clamp(clip_seconds / slot, 0.8, 1.3); `atempo` (chained when outside 0.5–2.0) → fitted clip. Placement: `start_i = max(seg.start, prev_end)`; `end_i = start_i + fitted_seconds`. Assemble on silence of `video_duration` seconds → `dubbed.wav` (24 kHz mono), padded or trimmed to the video length exactly.
+Per segment: slot = `seg.end - seg.start`; ratio = clip_seconds / slot; factor = min(ratio, 1.3) when ratio > 1, otherwise 1.0 — a clip that already fits is never slowed down to fill its slot (review finding F4: the old clamp stretched every short clip by 25 %); `atempo` (chained when outside 0.5–2.0) → fitted clip. Placement: `start_i = max(seg.start, prev_end)`; `end_i = start_i + fitted_seconds`. Assemble on silence of `video_duration` seconds → `dubbed.wav` (24 kHz mono), padded or trimmed to the video length exactly (done with numpy + soundfile for an exact sample count; every other media operation is an ffmpeg subprocess).
 
 ### B4.7 subtitles
 `Cue(start_i, end_i, translated_text_i)` → `subs.srt`, millisecond precision, via the `srt` library. No second transcription pass.
@@ -393,10 +394,14 @@ Per segment: slot = `seg.end - seg.start`; factor = clamp(clip_seconds / slot, 0
 ### B4.8 mux
 ```text
 burn on:   ffmpeg -i source.mp4 -i dubbed.wav -i subs.srt
-             -filter_complex "[0:v]subtitles=subs.srt:force_style='FontName=Noto Sans,Outline=1,MarginV=30'[v]"
+             -filter_complex "[0:v:0]subtitles=subs.srt:force_style='FontName=Noto Sans,Outline=1,MarginV=30'[v]"
              -map [v] -map 1:a -map 2:s -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 160k
-             -c:s mov_text -metadata:s:s:0 language=<iso639-2> -shortest out.mp4
-burn off:  same, but -map 0:v -c:v copy   (no re-encode)
+             -c:s mov_text -metadata:s:s:0 language=<iso639-2> -t <min(video, audio)> -movflags +faststart out.mp4
+burn off:  same, but -map 0:v:0 -c:v copy   (no re-encode)
+
+Why `-t` and not `-shortest`: measured — with a subtitle input, `-shortest` counts the sparse subtitle
+stream and cut a 10 s video to 3.0 s (the end of the last cue). `-shortest` is only used when no
+subtitle file is attached. `[0:v:0]` keeps cover-art streams from making the specifier ambiguous.
 ```
 Then `status = done`, `output = out.mp4`, intermediates deleted (`upload.bin`, `source.*`, `reference.wav`, `seg_*.wav`, `dubbed.wav`; `subs.srt` kept).
 
@@ -416,13 +421,16 @@ DATA_DIR/jobs/<id>/status.json
   "title": str|null, "detected_language": str|null,
   "source": {"type": "youtube|upload", "url": str|null, "filename": str|null},
   "options": {"to_lang": "es", "from_lang": null, "backend": "kokoro", "burn_subtitles": true},
-  "output": null | "out.mp4", "download_url": null | "/api/jobs/<id>/download"
+  "output": null | "out.mp4", "download_url": null | "/api/jobs/<id>/download",
+  "warnings": []          human sentences, e.g. speech that did not fit before the video ended (shown, not fatal)
 }
 ```
 
 Writes are atomic (write temp, `os.replace`). Reads never lock. Any web process can answer for any job. `MAX_CONCURRENT_JOBS` bounds CPU use; extra jobs wait in the pool queue in `queued`.
 
-Sweeper: every 5 minutes, delete job dirs whose `updated_at` is older than `JOB_TTL_MINUTES` and whose state is `done` or `failed`, plus `running` dirs older than 6 h (crashed server). Never touch a dir younger than 5 minutes.
+Sweeper: every 5 minutes, delete job dirs whose `updated_at` is older than `JOB_TTL_MINUTES` and whose state is `done` or `failed`, plus `running`/`queued` dirs and dirs with no readable status.json older than 6 h (crashed server). Never touch a dir younger than 5 minutes.
+
+Failure naming: the runner reads `step` from status.json when an exception escapes and records `"<step>: <message>"`; a job that dies before any stage ran is recorded as `"start: …"`.
 
 Predict: with `--workers 2`, what changes for the browser? Nothing — both workers read the same file.
 

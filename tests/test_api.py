@@ -6,10 +6,14 @@ the point of injecting ``run_fn`` into :class:`respeak.jobs.JobRunner`.
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
+import subprocess
+import sys
 import threading
 import time
+import types
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -18,7 +22,9 @@ from urllib.parse import unquote
 import pytest
 from fastapi.testclient import TestClient
 
+from respeak import api as api_module
 from respeak import jobs as jobs_module
+from respeak import main as main_module
 from respeak.config import Settings, get_settings
 from respeak.jobs import (
     JobNotFoundError,
@@ -32,6 +38,8 @@ from respeak.jobs import (
 from respeak.lang_codes import NAME_TO_CODE
 from respeak.main import app
 from respeak.pipeline.tts import available_backends
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # --------------------------------------------------------------------------- fixtures
 
@@ -106,6 +114,7 @@ def test_youtube_job_is_created_queued_and_submitted(
 
     status = read_status(settings, job_id)
     assert status["id"] == job_id
+    assert status["warnings"] == []  # F5: the key exists from the first write
     assert status["state"] == "queued"
     assert status["step"] is None
     assert status["progress"] == 0.0
@@ -134,9 +143,7 @@ def test_youtube_job_accepts_a_multipart_body_with_an_empty_file_part(client: Te
     assert response.status_code == 201, response.text
 
 
-def test_upload_job_streams_the_file_and_sanitises_its_name(
-    client: TestClient, settings: Settings
-) -> None:
+def test_upload_job_streams_the_file_and_sanitises_its_name(client: TestClient, settings: Settings) -> None:
     payload = b"fake mp4 bytes" * 100
     response = client.post(
         "/jobs",
@@ -242,6 +249,36 @@ def test_uploads_can_be_disabled(
     assert response.status_code == 400
     assert "uploads are disabled" in response.json()["error"]
     assert runner.submitted == []
+
+
+def test_a_forged_content_length_is_413_before_the_body_is_parsed(
+    client: TestClient, settings: Settings, runner: StubRunner
+) -> None:
+    """F8: the declared size is refused by the middleware, so nothing is spooled to disk."""
+    forged = settings.max_upload_mb * 1024 * 1024 + 4 * 1024 * 1024
+    response = client.post(
+        "/jobs",
+        data={"source_type": "upload", "to_lang": "es"},
+        files={"file": ("big.mp4", b"tiny", "video/mp4")},
+        headers={"Content-Length": str(forged)},
+    )
+    assert response.status_code == 413, response.text
+    assert "larger than" in response.json()["error"]
+    assert store_for(settings).list_ids() == []
+    assert runner.submitted == []
+
+
+def test_a_content_length_inside_the_limit_still_reaches_the_route(
+    client: TestClient, settings: Settings
+) -> None:
+    """The guard adds one MB of form overhead, so a legitimate upload is never refused by it."""
+    payload = b"\0" * (settings.max_upload_mb * 1024 * 1024 - 1024)
+    response = client.post(
+        "/jobs",
+        data={"source_type": "upload", "to_lang": "es"},
+        files={"file": ("clip.mp4", payload, "video/mp4")},
+    )
+    assert response.status_code == 201, response.text
 
 
 def test_oversize_upload_is_413_and_removes_the_job_dir(
@@ -512,3 +549,176 @@ def test_start_sweeper_runs_and_stops(settings: Settings) -> None:
         handle.stop.set()
     handle.thread.join(timeout=5)
     assert not handle.thread.is_alive()
+
+
+# --------------------------------------------------------------------------- F2: a broken job dir
+
+
+def _write_status(store: JobStore, job_id: str, raw: str) -> None:
+    (store.path(job_id) / "status.json").write_text(raw, encoding="utf-8")
+
+
+def test_sweep_survives_unreadable_status_files(settings: Settings) -> None:
+    """One job with `{}` and one holding a JSON list must not stop the pass (F2)."""
+    store = store_for(settings)
+    empty = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    _write_status(store, empty, "{}")
+    listish = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    _write_status(store, listish, '["not", "a", "status"]')
+    truncated = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    _write_status(store, truncated, '{"id": "x", "state": "do')
+    stamped = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    _write_status(store, stamped, '{"id": "x", "state": "done", "updated_at": "not a date"}')
+    old_done = _aged(store, "done", 90)
+
+    removed = sweep(store, ttl_minutes=settings.job_ttl_minutes)
+
+    assert removed == [old_done], "an expired job must still be swept in the same pass"
+    assert sorted(store.list_ids()) == sorted([empty, listish, truncated, stamped])
+
+
+def test_sweep_ages_an_unreadable_status_by_the_directory_mtime(settings: Settings) -> None:
+    """No usable timestamp: fall back to the directory's mtime and the 6 h rule (F2)."""
+    store = store_for(settings)
+    young = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    _write_status(store, young, "{}")
+    old = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    _write_status(store, old, "{}")
+    stamp = time.time() - 7 * 3600
+    os.utime(store.path(old), (stamp, stamp))
+
+    assert sweep(store, ttl_minutes=settings.job_ttl_minutes) == [old]
+    assert store.list_ids() == [young]
+
+
+# --------------------------------------------------------------------------- F3: live jobs
+
+
+def test_sweep_never_deletes_a_job_a_worker_is_inside(settings: Settings) -> None:
+    store = store_for(settings)
+    stale = _aged(store, "running", 60 * 7)  # older than the 6 h "the server died" rule
+    assert sweep(store, ttl_minutes=settings.job_ttl_minutes, active={stale}) == []
+    assert store.list_ids() == [stale]
+    assert sweep(store, ttl_minutes=settings.job_ttl_minutes) == [stale]
+
+
+def test_runner_publishes_the_jobs_it_is_running(settings: Settings) -> None:
+    store = store_for(settings)
+    started = threading.Event()
+    release = threading.Event()
+    seen: set[str] = set()
+
+    def slow(job_id: str, _settings: Settings, store_: JobStore) -> None:
+        seen.update(runner.active_ids)
+        started.set()
+        release.wait(10)
+
+    runner = JobRunner(store, settings, run_fn=slow)
+    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    try:
+        future = runner.submit(job_id)
+        assert started.wait(5)
+        assert job_id in runner.active_ids
+        release.set()
+        future.result(timeout=10)
+    finally:
+        release.set()
+        runner.shutdown()
+    assert seen == {job_id}
+    assert runner.active_ids == set(), "the id must be dropped even though the job ended"
+
+
+def test_start_sweeper_asks_the_runner_what_is_live(settings: Settings) -> None:
+    store = store_for(settings)
+    doomed = _aged(store, "done", 999)
+    runner = JobRunner(store, settings)
+    runner.active_ids.add(doomed)
+    handle = start_sweeper(store, settings, runner=runner, interval_seconds=0.05)
+    try:
+        time.sleep(0.4)  # several passes
+        assert store.list_ids() == [doomed], "an active job must survive the sweeper"
+        runner.active_ids.discard(doomed)
+        deadline = time.time() + 5
+        while time.time() < deadline and store.list_ids():
+            time.sleep(0.05)
+        assert store.list_ids() == []
+    finally:
+        handle.stop.set()
+        runner.shutdown(wait=False)
+    handle.thread.join(timeout=5)
+
+
+# --------------------------------------------------------------------------- F1: off the event loop
+
+
+@pytest.mark.parametrize("name", ["health", "backends", "create_job", "job_status", "job_download"])
+def test_routes_run_in_the_threadpool_not_on_the_loop(name: str) -> None:
+    """A coroutine route would do its disk writes and its torch import on the event loop (F1)."""
+    endpoint = getattr(api_module, name)
+    assert not inspect.iscoroutinefunction(endpoint), f"{name} must be a plain def"
+
+
+def test_importing_the_api_never_loads_torch_or_chatterbox() -> None:
+    """`/api/backends` must not be able to drag half a gigabyte of model code onto the loop (F1).
+
+    Run in a subprocess: by this point in the session another test has almost certainly imported
+    torch already, so only a fresh interpreter can answer the question.
+    """
+    code = (
+        "import sys\n"
+        "import respeak.api\n"
+        "from respeak.config import Settings\n"
+        "from respeak.pipeline.tts import available_backends\n"
+        "available_backends(Settings())\n"
+        "heavy = [m for m in sys.modules if m == 'torch' or m.startswith(('torch.', 'chatterbox'))]\n"
+        "print(','.join(sorted(heavy)))\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, cwd=REPO_ROOT, timeout=120
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "", f"importing respeak.api pulled in {proc.stdout.strip()}"
+
+
+def test_resolved_device_is_computed_once_per_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """torch.cuda.is_available() costs about a second; /api/health must not pay it per request."""
+    calls: list[int] = []
+
+    def counted(self: Settings) -> str:
+        calls.append(1)
+        return "cpu"
+
+    monkeypatch.setattr(Settings, "_detect_device", counted)
+    settings = Settings(device="auto")
+    assert settings.resolved_device() == "cpu"
+    assert settings.resolved_device() == "cpu"
+    assert len(calls) == 1
+    assert Settings(device="auto").resolved_device() == "cpu"
+    assert len(calls) == 2, "the cache is per instance, not global"
+
+
+# --------------------------------------------------------------------------- F6: startup imports
+
+
+def test_pipeline_run_fn_returns_the_real_entry_point() -> None:
+    from respeak.pipeline.run import run_job
+
+    assert main_module._pipeline_run_fn() is run_job
+
+
+def test_pipeline_run_fn_tolerates_only_its_own_missing_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "respeak.pipeline.run", None)
+    assert main_module._pipeline_run_fn() is None
+
+
+def test_pipeline_run_fn_reraises_a_broken_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing torch must fail at startup with its own traceback, not become a silent None (F6)."""
+    broken = types.ModuleType("respeak.pipeline.run")
+
+    def _raise(name: str) -> Any:
+        raise ModuleNotFoundError("No module named 'torch'", name="torch")
+
+    broken.__getattr__ = _raise  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "respeak.pipeline.run", broken)
+    with pytest.raises(ModuleNotFoundError, match="torch"):
+        main_module._pipeline_run_fn()

@@ -15,7 +15,7 @@ import re
 import shutil
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -95,9 +95,7 @@ class JobStore:
         if not self.jobs_dir.is_dir():
             return []
         return sorted(
-            entry.name
-            for entry in self.jobs_dir.iterdir()
-            if entry.is_dir() and JOB_ID_RE.match(entry.name)
+            entry.name for entry in self.jobs_dir.iterdir() if entry.is_dir() and JOB_ID_RE.match(entry.name)
         )
 
     # --------------------------------------------------------------- create
@@ -142,6 +140,7 @@ class JobStore:
             },
             "output": None,
             "download_url": None,
+            "warnings": [],
         }
         self._write(job_id, _derive(status))
         log.info("job %s created (%s → %s)", job_id, source_type, status["options"]["to_lang"])
@@ -257,6 +256,10 @@ class JobRunner:
         self.store = store
         self.settings = settings
         self.run_fn: RunFn = run_fn or placeholder_run
+        #: Jobs a worker thread is inside right now. The sweeper reads it so that a job that is
+        #: genuinely still running (a long video on a slow CPU) is never deleted under its own feet.
+        self.active_ids: set[str] = set()
+        self._active_lock = threading.Lock()
         self._pool = ThreadPoolExecutor(
             max_workers=max(1, int(settings.max_concurrent_jobs)),
             thread_name_prefix="respeak-job",
@@ -271,6 +274,8 @@ class JobRunner:
         self._pool.shutdown(wait=wait, cancel_futures=not wait)
 
     def _run(self, job_id: str) -> None:
+        with self._active_lock:
+            self.active_ids.add(job_id)
         try:
             self.store.mark(job_id, "running")
             self.run_fn(job_id, self.settings, self.store)
@@ -281,6 +286,9 @@ class JobRunner:
                 self.store.fail(job_id, f"{step}: {exc}")
             except Exception:  # pragma: no cover - the job dir vanished under us
                 log.exception("could not record the failure of job %s", job_id)
+        finally:
+            with self._active_lock:
+                self.active_ids.discard(job_id)
 
     def _current_step(self, job_id: str) -> str:
         try:
@@ -292,13 +300,21 @@ class JobRunner:
         return str(status.get("step") or "start")
 
 
-def sweep(store: JobStore, ttl_minutes: int, now: datetime | None = None) -> list[str]:
+def sweep(
+    store: JobStore,
+    ttl_minutes: int,
+    now: datetime | None = None,
+    active: Collection[str] = frozenset(),
+) -> list[str]:
     """Delete expired job directories and return the ids removed (flow.md B5).
 
     * ``done`` / ``failed`` older than ``ttl_minutes``
     * ``queued`` / ``running`` older than 6 h (a server that died mid-job)
-    * a directory without a readable status.json, older than 6 h
-    * never anything younger than 5 minutes
+    * a directory without a readable status.json, or with unreadable timestamps, older than 6 h
+      (measured from the directory's own mtime)
+    * never anything younger than 5 minutes, and never an id in ``active``
+
+    One unreadable job never stops the pass: every directory is examined on its own.
     """
     moment = now or _utcnow()
     floor = moment - timedelta(minutes=MIN_AGE_MINUTES)
@@ -307,28 +323,69 @@ def sweep(store: JobStore, ttl_minutes: int, now: datetime | None = None) -> lis
 
     removed: list[str] = []
     for job_id in store.list_ids():
-        job_dir = store.path(job_id)
-        try:
-            status = store.get(job_id)
-        except ValueError:
-            status = None
-        if status is None:
-            touched = datetime.fromtimestamp(job_dir.stat().st_mtime, UTC) if job_dir.exists() else moment
-            expired = touched < stale_cutoff
-        else:
-            touched = parse_iso(str(status.get("updated_at") or status.get("created_at")))
-            state = str(status.get("state", "queued"))
-            expired = touched < (ttl_cutoff if state in FINISHED_STATES else stale_cutoff)
-        if not expired or touched > floor:
+        if job_id in active:
+            log.debug("sweeper skipped job %s: a worker is running it", job_id)
             continue
         try:
-            shutil.rmtree(job_dir)
-        except OSError as exc:  # pragma: no cover - permissions / races
-            log.warning("sweeper could not remove %s: %s", job_dir, exc)
-            continue
-        removed.append(job_id)
-        log.info("sweeper removed job %s (last touched %s)", job_id, _iso(touched))
+            if _sweep_one(store, job_id, moment, floor, ttl_cutoff, stale_cutoff):
+                removed.append(job_id)
+        except Exception:  # one broken job directory must never end the pass
+            log.exception("sweeper skipped job %s: it could not be examined", job_id)
     return removed
+
+
+def _sweep_one(
+    store: JobStore,
+    job_id: str,
+    moment: datetime,
+    floor: datetime,
+    ttl_cutoff: datetime,
+    stale_cutoff: datetime,
+) -> bool:
+    """Delete one job directory if it has expired; True when it was removed."""
+    job_dir = store.path(job_id)
+    touched, cutoff = _age_of(store, job_id, job_dir, moment, ttl_cutoff, stale_cutoff)
+    if touched >= cutoff or touched > floor:
+        return False
+    try:
+        shutil.rmtree(job_dir)
+    except OSError as exc:  # pragma: no cover - permissions / races
+        log.warning("sweeper could not remove %s: %s", job_dir, exc)
+        return False
+    log.info("sweeper removed job %s (last touched %s)", job_id, _iso(touched))
+    return True
+
+
+def _age_of(
+    store: JobStore,
+    job_id: str,
+    job_dir: Path,
+    moment: datetime,
+    ttl_cutoff: datetime,
+    stale_cutoff: datetime,
+) -> tuple[datetime, datetime]:
+    """``(last touched, the cutoff it must be older than)`` for one job directory."""
+    try:
+        status = store.get(job_id)  # raises on invalid JSON or a JSON list
+    except ValueError as exc:
+        log.warning("job %s has an unreadable status.json (%s); ageing it by its directory", job_id, exc)
+        status = None
+    if isinstance(status, dict):
+        raw = status.get("updated_at") or status.get("created_at")
+        if raw:
+            try:
+                touched = parse_iso(str(raw))
+            except (TypeError, ValueError):
+                log.warning("job %s has an unreadable timestamp %r; ageing it by its directory", job_id, raw)
+            else:
+                state = str(status.get("state", "queued"))
+                return touched, (ttl_cutoff if state in FINISHED_STATES else stale_cutoff)
+    # No status, no timestamps: the directory's own mtime and the 6 h rule for a crashed server.
+    try:
+        touched = datetime.fromtimestamp(job_dir.stat().st_mtime, UTC)
+    except OSError:  # pragma: no cover - the directory vanished under us
+        touched = moment
+    return touched, stale_cutoff
 
 
 class SweeperHandle(NamedTuple):
@@ -341,15 +398,20 @@ class SweeperHandle(NamedTuple):
 def start_sweeper(
     store: JobStore,
     settings: Settings,
+    runner: JobRunner | None = None,
     interval_seconds: float = SWEEP_INTERVAL_SECONDS,
 ) -> SweeperHandle:
-    """Start the daemon thread that sweeps every 5 minutes; ``handle.stop.set()`` ends it."""
+    """Start the daemon thread that sweeps every 5 minutes; ``handle.stop.set()`` ends it.
+
+    Pass the ``runner`` so that jobs its workers are inside right now are never swept.
+    """
     stop = threading.Event()
 
     def loop() -> None:
         while not stop.wait(interval_seconds):
             try:
-                removed = sweep(store, settings.job_ttl_minutes)
+                active = runner.active_ids if runner is not None else frozenset()
+                removed = sweep(store, settings.job_ttl_minutes, active=active)
             except Exception:  # pragma: no cover - the sweeper must never die
                 log.exception("sweeper pass failed")
             else:
