@@ -29,6 +29,7 @@ from .jobs import JobStore, get_runner, get_store
 from .lang_codes import NAME_TO_CODE, SOURCE_LANGUAGES
 from .pipeline.inputs import InputError, check_public_url
 from .pipeline.tts import available_backends
+from .selfupdate import component_versions
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +94,10 @@ def health() -> dict[str, Any]:
         "limits": settings.limits(),
         "jobs_dir": str(settings.jobs_dir),
         "binaries": {name: shutil.which(name) is not None for name in ("ffmpeg", "ffprobe", "deno")},
+        # dist-info reads only (respeak.selfupdate) — importing torch here would cost a second and
+        # half a gigabyte on a route that is polled. With YTDLP_AUTO_UPDATE on, this is where an
+        # operator checks that the container really did pick up a newer yt-dlp (plan.md 2.0).
+        "versions": component_versions(),
     }
 
 

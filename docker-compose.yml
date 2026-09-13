@@ -1,0 +1,73 @@
+# Respeak — plan.md 2.2, decisions D-22 (this is the headline install path), D-25 (GPU is a profile).
+#
+#   docker compose up                              CPU, http://localhost:8000
+#   docker compose build --build-arg PREWARM=1     download the models into the image instead
+#   docker compose --profile gpu up respeak-gpu    NVIDIA GPU (needs the NVIDIA container toolkit)
+#
+# `docker compose down` keeps both the finished videos (./data) and the models (the named volume);
+# `docker compose down -v` throws the ~1 GB of models away too.
+name: respeak
+
+# Everything the two services share. YAML anchors, so the CPU and GPU services cannot drift apart.
+x-respeak-common: &respeak-common
+  restart: unless-stopped
+  ports:
+    - "8000:8000"
+  # Optional overrides (TTS_BACKEND, WHISPER_MODEL, MAX_VIDEO_SECONDS, …). `required: false` means
+  # `docker compose up` works in a fresh clone that never copied .env.example. Needs Compose v2.24+.
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    # Finished videos, visible on the host; swept after JOB_TTL_MINUTES.
+    # The container runs as uid 1000 (Dockerfile ARG UID), so ./data has to be writable by uid 1000.
+    # `mkdir -p data` before the first run: a bind-mount path docker has to create itself is made
+    # root-owned, and then no job can be written. On a host whose user is not uid 1000, rebuild with
+    # `docker compose build --build-arg UID=$(id -u) --build-arg GID=$(id -g)`.
+    - ./data:/app/data
+    # Whisper + Kokoro (HF_HOME) and Argos (XDG_DATA_HOME) caches: a named volume, so recreating the
+    # container does not re-download a gigabyte of models.
+    - respeak-models:/app/models
+  # The same check the Dockerfile declares; repeated here so `docker compose ps` shows it even when
+  # the image is pulled rather than built.
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    # A job in flight keeps the process busy; do not call it unhealthy while it works.
+    start_period: 40s
+  # A running job holds ffmpeg and a model; give it a moment to be cancelled cleanly.
+  stop_grace_period: 30s
+
+services:
+  respeak:
+    <<: *respeak-common
+    build:
+      context: .
+      # TORCH_INDEX stays at the Dockerfile's CPU default; pass PREWARM=1 on the command line to
+      # bake the models in: docker compose build --build-arg PREWARM=1
+    image: respeak:local
+
+  # D-25: CUDA is a build-arg, not an extra. Untested here (this machine has a driver mismatch, D-16).
+  respeak-gpu:
+    <<: *respeak-common
+    profiles: ["gpu"]
+    build:
+      context: .
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu128
+    image: respeak:gpu
+    # Wins over anything .env says; faster-whisper then picks float16 on its own (asr.compute_type_for).
+    environment:
+      DEVICE: cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+
+volumes:
+  respeak-models:

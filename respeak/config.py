@@ -32,6 +32,12 @@ class Settings(BaseSettings):
 
     allow_uploads: bool = True
     ytdlp_cookies_file: Path | None = None
+    #: Update yt-dlp at startup (plan.md 2.0). Off from source, on in the Docker image: YouTube breaks
+    #: more often than this repo is released, and the fix is almost always a newer yt-dlp.
+    ytdlp_auto_update: bool = False
+    #: Comma-separated ISO-639-1 codes `python -m respeak.prewarm` downloads models for (Argos pairs
+    #: through English, Kokoro voices, and the Japanese dictionary when "ja" is in the list).
+    prewarm_languages: str = "en,es"
 
     log_level: str = "INFO"
 

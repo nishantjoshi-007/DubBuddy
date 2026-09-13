@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,9 +11,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, api, pages
-from .config import get_settings
+from .config import Settings, get_settings
 from .jobs import get_runner, get_store, start_sweeper
 from .pipeline.ffmpeg import ensure_binaries
+from .selfupdate import component_versions, update_ytdlp
 
 BASE_DIR = Path(__file__).resolve().parent
 log = logging.getLogger("respeak")
@@ -37,11 +39,27 @@ async def lifespan(app: FastAPI):
         settings.whisper_model,
         settings.jobs_dir,
     )
+    log.info("versions: %s", ", ".join(f"{name} {version}" for name, version in component_versions().items()))
+    _start_ytdlp_update(settings)
     try:
         yield
     finally:
         sweeper.stop.set()
         runner.shutdown(wait=False)
+
+
+def _start_ytdlp_update(settings: Settings) -> threading.Thread | None:
+    """Kick off the yt-dlp upgrade in a daemon thread when `YTDLP_AUTO_UPDATE` is on (plan.md 2.0).
+
+    A daemon thread, never the event loop and never inline: `uv pip install` takes seconds to a minute
+    and the server must answer `/api/health` immediately. Daemon, so a shutdown during the download
+    does not hang. `update_ytdlp()` never raises, so nothing here can break startup.
+    """
+    if not settings.ytdlp_auto_update:
+        return None
+    thread = threading.Thread(target=update_ytdlp, name="ytdlp-update", daemon=True)
+    thread.start()
+    return thread
 
 
 def _pipeline_run_fn():

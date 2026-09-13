@@ -1,11 +1,34 @@
+# What must never reach the build context. The Dockerfile only copies pyproject.toml, uv.lock,
+# README.md and respeak/, so this is mostly about keeping the context small and secrets out of it.
 .git
+.gitignore
+.github
+
+# A host venv (built against the host's python) would be useless and huge inside the image.
 .venv
 venv
-data
+
+# Secrets and local state: .env is mounted at run time (compose env_file), never baked in.
 .env
+.env.*
+!.env.example
+data
 *.log
+
+# Docs and plans: the image needs README.md (pyproject reads it), nothing else.
 plan.md
+flow.md
+decisions.md
 learning-harness.md
+
+# Tests run from the source checkout, not from the image.
+tests
+
 __pycache__
+*.pyc
 .pytest_cache
 .ruff_cache
+.mypy_cache
+Dockerfile
+docker-compose.yml
+.dockerignore
