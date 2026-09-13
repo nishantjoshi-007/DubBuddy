@@ -52,6 +52,7 @@ N-19  The name is **Respeak** (package `respeak`, CLI `respeak`, page title "Res
 N-20  `plan.md` is a private working document and is not pushed; `decisions.md` and `flow.md` are committed.
 N-21  Go-ahead for Phase 0 and Phase 1: Claude orchestrates, subagents (Opus where it matters) execute tasks.
 N-22  Clone-and-run only. No PyPI package. (2026-09-12)
+N-23  Skip building the Docker image for now; the Dockerfile and compose file stay in the repo untested. Root disk freed (39 GB). Folder renamed to Respeak on disk. (2026-09-12)
 ```
 
 ---
