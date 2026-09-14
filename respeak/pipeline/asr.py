@@ -1,4 +1,4 @@
-"""Speech recognition with faster-whisper (flow.md B4.3, decisions D-06).
+"""Speech recognition with faster-whisper (docs/flow.md B4.3).
 
 One `WhisperModel` per (model, device, compute_type) per process: loading `small` costs seconds and the
 worker pool reuses the same interpreter for every job.  Everything here is synchronous — the pipeline runs
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 #: fitted to its slot (B4.6) and a subtitle cue nobody can read (B4.7).
 MIN_SEGMENT_SECONDS = 0.6
 
-#: compute_type used on CUDA when the operator left WHISPER_COMPUTE at its default (D-06).
+#: compute_type used on CUDA when the operator left WHISPER_COMPUTE at its default.
 CUDA_COMPUTE_TYPE = "float16"
 
 ProgressCallback = Callable[[float], None]
@@ -90,7 +90,7 @@ def transcribe(
     settings: Settings,
     progress: ProgressCallback | None = None,
 ) -> Transcript:
-    """Transcribe a 16 kHz mono wav into a `Transcript` (flow.md B4.3).
+    """Transcribe a 16 kHz mono wav into a `Transcript` (docs/flow.md B4.3).
 
     `language` is the Advanced-fold override (ISO-639-1); None auto-detects.  `progress`, when given, is
     called with a 0–1 fraction as segments arrive, and once with 1.0 at the end.

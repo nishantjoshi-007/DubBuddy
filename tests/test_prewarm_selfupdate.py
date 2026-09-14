@@ -1,4 +1,4 @@
-"""P2-A: yt-dlp self-update, the version report and `python -m respeak.prewarm` (plan.md 2.0 / 2.3).
+"""yt-dlp self-update, the version report and `python -m respeak.prewarm`.
 
 Offline and fast by construction: every installer call is a monkeypatched ``subprocess.run`` and every
 prewarm run here skips the steps that would download something. Nothing in this file touches the
@@ -158,7 +158,7 @@ def test_auto_update_is_off_unless_asked() -> None:
 
 
 def test_auto_update_runs_in_a_daemon_thread(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Never on the event loop and never blocking startup (plan.md 2.0)."""
+    """Never on the event loop and never blocking startup."""
     done = threading.Event()
     seen: dict[str, object] = {}
 
@@ -233,7 +233,7 @@ def test_unidic_is_only_warmed_for_japanese(capsys: pytest.CaptureFixture) -> No
 def test_a_failed_step_is_reported_and_sets_the_exit_code(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    """One unreachable download must not stop the others (plan.md 2.3: log and continue)."""
+    """One unreachable download must not stop the others (log and continue)."""
 
     def boom(_settings: Settings, _model: str) -> str:
         raise RuntimeError("the model registry is offline")

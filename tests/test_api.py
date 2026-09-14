@@ -1,4 +1,4 @@
-"""Job store, job runner, routes and sweeper (flow.md B3, B5, B7).
+"""Job store, job runner, routes and sweeper (docs/flow.md B3, B5, B7).
 
 Everything here is offline: no model, no network, no ffmpeg. The pipeline itself is stubbed, which is
 the point of injecting ``run_fn`` into :class:`respeak.jobs.JobRunner`.
@@ -94,8 +94,8 @@ def read_status(settings: Settings, job_id: str) -> dict[str, Any]:
     return json.loads((settings.jobs_dir / job_id / "status.json").read_text(encoding="utf-8"))
 
 
-YOUTUBE_FORM = {
-    "source_type": "youtube",
+URL_FORM = {
+    "source_type": "url",
     "url": "https://www.youtube.com/watch?v=abc12345678",
     "to_lang": "es",
     "from_lang": "en",
@@ -106,10 +106,10 @@ YOUTUBE_FORM = {
 # --------------------------------------------------------------------------- POST /jobs
 
 
-def test_youtube_job_is_created_queued_and_submitted(
+def test_url_job_is_created_queued_and_submitted(
     client: TestClient, settings: Settings, runner: StubRunner
 ) -> None:
-    response = client.post("/jobs", data=YOUTUBE_FORM)
+    response = client.post("/jobs", data=URL_FORM)
     assert response.status_code == 201, response.text
     body = response.json()
     job_id = body["id"]
@@ -118,7 +118,7 @@ def test_youtube_job_is_created_queued_and_submitted(
 
     status = read_status(settings, job_id)
     assert status["id"] == job_id
-    assert status["warnings"] == []  # F5: the key exists from the first write
+    assert status["warnings"] == []  # the key exists from the first write
     assert status["state"] == "queued"
     assert status["step"] is None
     assert status["progress"] == 0.0
@@ -127,22 +127,22 @@ def test_youtube_job_is_created_queued_and_submitted(
     assert status["detected_language"] is None
     assert status["output"] is None
     assert status["download_url"] is None
-    assert status["source"] == {"type": "youtube", "url": YOUTUBE_FORM["url"], "filename": None}
+    assert status["source"] == {"type": "url", "url": URL_FORM["url"], "filename": None}
     assert status["options"] == {
         "to_lang": "es",
         "from_lang": "en",
         "backend": "kokoro",
-        "voice": None,  # no voice picked: the backend uses its curated default (plan.md 3.3)
+        "voice": None,  # no voice picked: the backend uses its curated default
         "burn_subtitles": True,
     }
     assert parse_iso(status["created_at"]) <= parse_iso(status["updated_at"])
 
 
-def test_youtube_job_accepts_a_multipart_body_with_an_empty_file_part(client: TestClient) -> None:
+def test_url_job_accepts_a_multipart_body_with_an_empty_file_part(client: TestClient) -> None:
     """A browser FormData is always multipart; an empty file input must not break the URL path."""
     response = client.post(
         "/jobs",
-        data=YOUTUBE_FORM,
+        data=URL_FORM,
         files={"file": ("", b"", "application/octet-stream")},
     )
     assert response.status_code == 201, response.text
@@ -170,25 +170,26 @@ def test_upload_job_streams_the_file_and_sanitises_its_name(client: TestClient, 
 @pytest.mark.parametrize(
     ("form", "fragment"),
     [
-        ({"source_type": "youtube", "to_lang": "es"}, "URL is required"),
-        ({"source_type": "youtube", "url": "ftp://x/y", "to_lang": "es"}, "http"),
+        ({"source_type": "url", "to_lang": "es"}, "URL is required"),
+        ({"source_type": "url", "url": "ftp://x/y", "to_lang": "es"}, "http"),
         ({"source_type": "banana", "url": "https://x/y", "to_lang": "es"}, "source_type"),
-        ({"source_type": "youtube", "url": "https://x/y"}, "to_lang is required"),
-        ({"source_type": "youtube", "url": "https://x/y", "to_lang": "zz"}, "cannot speak 'zz'"),
+        ({"source_type": "youtube", "url": "https://x/y", "to_lang": "es"}, "source_type"),  # the old name
+        ({"source_type": "url", "url": "https://x/y"}, "to_lang is required"),
+        ({"source_type": "url", "url": "https://x/y", "to_lang": "zz"}, "cannot speak 'zz'"),
         (
-            {"source_type": "youtube", "url": "https://x/y", "to_lang": "es", "from_lang": "es"},
+            {"source_type": "url", "url": "https://x/y", "to_lang": "es", "from_lang": "es"},
             "same",
         ),
         (
-            {"source_type": "youtube", "url": "https://x/y", "to_lang": "es", "from_lang": "xx"},
+            {"source_type": "url", "url": "https://x/y", "to_lang": "es", "from_lang": "xx"},
             "unknown source language",
         ),
         (
-            {"source_type": "youtube", "url": "https://x/y", "to_lang": "es", "backend": "nope"},
+            {"source_type": "url", "url": "https://x/y", "to_lang": "es", "backend": "nope"},
             "unknown backend",
         ),
         (
-            {"source_type": "youtube", "url": "https://x/y", "to_lang": "es", "burn_subtitles": "maybe"},
+            {"source_type": "url", "url": "https://x/y", "to_lang": "es", "burn_subtitles": "maybe"},
             "burn_subtitles",
         ),
         ({"source_type": "upload", "to_lang": "es"}, "file is required"),
@@ -207,7 +208,7 @@ def test_validation_errors_are_400_json_and_create_nothing(
 def test_a_backend_that_is_not_installed_is_refused_with_its_own_reason(
     client: TestClient, settings: Settings, runner: StubRunner
 ) -> None:
-    """Whatever the backend registry reports as missing is refused before the job exists (D-27)."""
+    """Whatever the backend registry reports as missing is refused before the job exists."""
     infos = available_backends(settings)
     missing = [info for info in infos.values() if not info.installed]
     if not missing:
@@ -215,7 +216,7 @@ def test_a_backend_that_is_not_installed_is_refused_with_its_own_reason(
     info = missing[0]
     response = client.post(
         "/jobs",
-        data={**YOUTUBE_FORM, "backend": info.name, "to_lang": sorted(info.languages)[0] or "es"},
+        data={**URL_FORM, "backend": info.name, "to_lang": sorted(info.languages)[0] or "es"},
     )
     assert response.status_code == 400
     assert response.json()["error"] == info.reason
@@ -225,18 +226,18 @@ def test_a_backend_that_is_not_installed_is_refused_with_its_own_reason(
 def test_a_target_language_the_backend_cannot_speak_is_refused(
     client: TestClient, settings: Settings
 ) -> None:
-    """The target list comes from the backend, so anything outside it is a 400 (D-24)."""
+    """The target list comes from the backend, so anything outside it is a 400."""
     kokoro = available_backends(settings)["kokoro"]
     outside = sorted(set(NAME_TO_CODE.values()) - kokoro.languages)
     if not outside:
         pytest.skip("kokoro speaks every source language")
-    response = client.post("/jobs", data={**YOUTUBE_FORM, "to_lang": outside[0]})
+    response = client.post("/jobs", data={**URL_FORM, "to_lang": outside[0]})
     assert response.status_code == 400
     assert f"cannot speak '{outside[0]}'" in response.json()["error"]
 
 
 def test_regional_codes_are_normalised(client: TestClient, settings: Settings) -> None:
-    job_id = client.post("/jobs", data={**YOUTUBE_FORM, "to_lang": "ES-mx"}).json()["id"]
+    job_id = client.post("/jobs", data={**URL_FORM, "to_lang": "ES-mx"}).json()["id"]
     assert read_status(settings, job_id)["options"]["to_lang"] == "es"
 
 
@@ -259,7 +260,7 @@ def test_uploads_can_be_disabled(
 def test_a_forged_content_length_is_413_before_the_body_is_parsed(
     client: TestClient, settings: Settings, runner: StubRunner
 ) -> None:
-    """F8: the declared size is refused by the middleware, so nothing is spooled to disk."""
+    """the declared size is refused by the middleware, so nothing is spooled to disk."""
     forged = settings.max_upload_mb * 1024 * 1024 + 4 * 1024 * 1024
     response = client.post(
         "/jobs",
@@ -305,7 +306,7 @@ def test_oversize_upload_is_413_and_removes_the_job_dir(
 
 
 def test_backends_publishes_a_voice_table_per_language(client: TestClient) -> None:
-    """The form fills its voice select straight from this (flow.md B6, plan.md 3.3)."""
+    """The form fills its voice select straight from this (docs/flow.md B6)."""
     backends = {entry["name"]: entry for entry in client.get("/api/backends").json()["backends"]}
     kokoro = backends["kokoro"]["voices"]
     assert set(kokoro) <= set(backends["kokoro"]["languages"])
@@ -315,14 +316,14 @@ def test_backends_publishes_a_voice_table_per_language(client: TestClient) -> No
 
 
 def test_a_picked_voice_is_stored_in_the_options(client: TestClient, settings: Settings) -> None:
-    response = client.post("/jobs", data={**YOUTUBE_FORM, "voice": "em_alex"})
+    response = client.post("/jobs", data={**URL_FORM, "voice": "em_alex"})
     assert response.status_code == 201, response.text
     assert read_status(settings, response.json()["id"])["options"]["voice"] == "em_alex"
 
 
 def test_an_empty_voice_field_means_the_backend_default(client: TestClient, settings: Settings) -> None:
     """The form always posts the field; blank must mean "default", not "no such voice"."""
-    response = client.post("/jobs", data={**YOUTUBE_FORM, "voice": ""})
+    response = client.post("/jobs", data={**URL_FORM, "voice": ""})
     assert response.status_code == 201, response.text
     assert read_status(settings, response.json()["id"])["options"]["voice"] is None
 
@@ -331,7 +332,7 @@ def test_an_empty_voice_field_means_the_backend_default(client: TestClient, sett
 def test_a_voice_the_backend_cannot_use_is_400_with_the_list(
     client: TestClient, settings: Settings, runner: StubRunner, voice: str
 ) -> None:
-    response = client.post("/jobs", data={**YOUTUBE_FORM, "voice": voice})
+    response = client.post("/jobs", data={**URL_FORM, "voice": voice})
     assert response.status_code == 400, response.text
     error = response.json()["error"]
     assert voice in error and "ef_dora" in error
@@ -343,7 +344,7 @@ def test_a_voice_for_a_backend_that_has_none_is_refused(client: TestClient, sett
     chatterbox = available_backends(settings)["chatterbox"]
     if not chatterbox.installed:
         pytest.skip("the `clone` extra is not installed here")
-    response = client.post("/jobs", data={**YOUTUBE_FORM, "backend": "chatterbox", "voice": "ef_dora"})
+    response = client.post("/jobs", data={**URL_FORM, "backend": "chatterbox", "voice": "ef_dora"})
     assert response.status_code == 400
     assert "no preset voices" in response.json()["error"]
 
@@ -413,7 +414,7 @@ def test_a_backend_with_no_preset_voices_is_404(client: TestClient) -> None:
 
 
 def test_the_voice_sample_route_runs_in_the_threadpool_not_on_the_loop() -> None:
-    """First play loads a model and synthesises; a coroutine route would do it on the loop (F1)."""
+    """First play loads a model and synthesises; a coroutine route would do it on the loop."""
     assert not inspect.iscoroutinefunction(api_module.voice_sample)
 
 
@@ -454,7 +455,7 @@ def test_the_bucket_starts_full_empties_and_refills() -> None:
 
 
 def test_the_bucket_table_is_capped_so_a_flood_cannot_grow_it_forever() -> None:
-    """F5: one dict entry per address is itself the leak when addresses are free (an IPv6 /64).
+    """one dict entry per address is itself the leak when addresses are free (an IPv6 /64).
 
     Forgetting a bucket only ever hands that address a *full* bucket back, so evicting the
     least-recently-seen entries costs one extra allowed submission, never an unbounded process.
@@ -471,7 +472,7 @@ def test_the_bucket_table_is_capped_so_a_flood_cannot_grow_it_forever() -> None:
 
 def test_no_rate_limit_by_default(client: TestClient) -> None:
     for _ in range(5):
-        assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 201
+        assert client.post("/jobs", data=URL_FORM).status_code == 201
 
 
 def _limited_client(monkeypatch: pytest.MonkeyPatch, rate: str, trust_proxy: bool = False) -> TestClient:
@@ -487,9 +488,9 @@ def test_the_fourth_job_in_a_minute_is_429_with_retry_after(
 ) -> None:
     client = _limited_client(monkeypatch, "3/minute")
     for attempt in range(3):
-        assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 201, f"attempt {attempt}"
+        assert client.post("/jobs", data=URL_FORM).status_code == 201, f"attempt {attempt}"
 
-    refused = client.post("/jobs", data=YOUTUBE_FORM)
+    refused = client.post("/jobs", data=URL_FORM)
     assert refused.status_code == 429
     assert refused.json()["error"] == "too many jobs from this address; try again in 1 minute"
     assert 1 <= int(refused.headers["Retry-After"]) <= 60
@@ -503,13 +504,13 @@ def test_the_limit_is_checked_before_the_form_is_validated(
     """Nonsense must cost a flooder the same token a real job does (otherwise it is free)."""
     client = _limited_client(monkeypatch, "1/hour")
     assert client.post("/jobs", data={"source_type": "banana"}).status_code == 400
-    assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 429
+    assert client.post("/jobs", data=URL_FORM).status_code == 429
 
 
 def test_an_oversize_upload_is_refused_without_spending_a_token(
     settings: Settings, runner: StubRunner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F7: a body that can never become a job must not cost the browser its whole allowance.
+    """a body that can never become a job must not cost the browser its whole allowance.
 
     Picking one too-large file is a mistake a person makes in the file dialog, not a flood; the 413
     is free, and the next, correct, submission still goes through under a 1/minute limit.
@@ -523,7 +524,7 @@ def test_an_oversize_upload_is_refused_without_spending_a_token(
         headers={"Content-Length": str(forged)},
     )
     assert refused.status_code == 413, refused.text
-    assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 201, "the 413 spent a token"
+    assert client.post("/jobs", data=URL_FORM).status_code == 201, "the 413 spent a token"
     assert len(runner.submitted) == 1
 
 
@@ -532,35 +533,35 @@ def test_the_proxy_header_is_ignored_unless_trust_proxy_is_on(
 ) -> None:
     """Anyone can send X-Forwarded-For; believing it without a proxy is a free reset."""
     client = _limited_client(monkeypatch, "1/minute")
-    assert client.post("/jobs", data=YOUTUBE_FORM, headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 201
-    second = client.post("/jobs", data=YOUTUBE_FORM, headers={"X-Forwarded-For": "8.8.8.8"})
+    assert client.post("/jobs", data=URL_FORM, headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 201
+    second = client.post("/jobs", data=URL_FORM, headers={"X-Forwarded-For": "8.8.8.8"})
     assert second.status_code == 429, "both came from the same real address"
 
 
 def test_with_trust_proxy_the_last_forwarded_entry_is_the_client(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F1: a proxy *appends* the peer it saw, so the rightmost entry is the only trustworthy one."""
+    """a proxy *appends* the peer it saw, so the rightmost entry is the only trustworthy one."""
     client = _limited_client(monkeypatch, "1/minute", trust_proxy=True)
     peer = {"X-Forwarded-For": "203.0.113.7, 9.9.9.9"}  # junk the client sent, then our proxy's peer
-    assert client.post("/jobs", data=YOUTUBE_FORM, headers=peer).status_code == 201
-    assert client.post("/jobs", data=YOUTUBE_FORM, headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 201
-    assert client.post("/jobs", data=YOUTUBE_FORM, headers=peer).status_code == 429
+    assert client.post("/jobs", data=URL_FORM, headers=peer).status_code == 201
+    assert client.post("/jobs", data=URL_FORM, headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 201
+    assert client.post("/jobs", data=URL_FORM, headers=peer).status_code == 429
 
 
 def test_a_client_supplied_forwarded_prefix_cannot_buy_a_fresh_bucket(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F1: reading the leftmost entry meant one header line bought unlimited buckets."""
+    """reading the leftmost entry meant one header line bought unlimited buckets."""
     client = _limited_client(monkeypatch, "1/minute", trust_proxy=True)
     invented = {"X-Forwarded-For": "1.1.1.1, 9.9.9.9"}
     again = {"X-Forwarded-For": "2.2.2.2, 9.9.9.9"}  # same real peer, a different invented prefix
-    assert client.post("/jobs", data=YOUTUBE_FORM, headers=invented).status_code == 201
-    assert client.post("/jobs", data=YOUTUBE_FORM, headers=again).status_code == 429
+    assert client.post("/jobs", data=URL_FORM, headers=invented).status_code == 201
+    assert client.post("/jobs", data=URL_FORM, headers=again).status_code == 429
 
 
 def test_a_forwarded_entry_that_is_not_an_address_falls_back_to_the_real_peer() -> None:
-    """F1/F5: the bucket key is always a parsed IP, never whatever text arrived in the header."""
+    """the bucket key is always a parsed IP, never whatever text arrived in the header."""
 
     class _Req:
         headers = {"x-forwarded-for": "10.0.0.1, unknown"}
@@ -576,7 +577,7 @@ def test_a_broken_rate_limit_setting_refuses_the_job_rather_than_ignoring_the_li
     settings: Settings, runner: StubRunner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = _limited_client(monkeypatch, "10 jobs per hour")
-    response = client.post("/jobs", data=YOUTUBE_FORM)
+    response = client.post("/jobs", data=URL_FORM)
     assert response.status_code == 500
     assert "RATE_LIMIT_JOBS" in response.json()["error"]
     assert runner.submitted == []
@@ -614,7 +615,7 @@ def test_unknown_job_is_404_on_both_read_routes(client: TestClient) -> None:
 
 
 def test_status_route_returns_the_file_on_disk(client: TestClient, settings: Settings) -> None:
-    job_id = client.post("/jobs", data=YOUTUBE_FORM).json()["id"]
+    job_id = client.post("/jobs", data=URL_FORM).json()["id"]
     response = client.get(f"/api/jobs/{job_id}")
     assert response.status_code == 200
     assert response.json() == read_status(settings, job_id)
@@ -623,7 +624,7 @@ def test_status_route_returns_the_file_on_disk(client: TestClient, settings: Set
 def test_download_404_before_done_409_when_missing_and_200_after(
     client: TestClient, settings: Settings
 ) -> None:
-    job_id = client.post("/jobs", data=YOUTUBE_FORM).json()["id"]
+    job_id = client.post("/jobs", data=URL_FORM).json()["id"]
     store = store_for(settings)
 
     assert client.get(f"/api/jobs/{job_id}/download").status_code == 404
@@ -651,7 +652,7 @@ def test_download_404_before_done_409_when_missing_and_200_after(
 def test_store_update_merges_bumps_and_derives(settings: Settings) -> None:
     store = store_for(settings)
     job_id = store.create(
-        source={"type": "youtube", "url": "https://y/1"},
+        source={"type": "url", "url": "https://y/1"},
         options={"to_lang": "es", "from_lang": None, "backend": "kokoro", "burn_subtitles": True},
         title="A Title",
     )
@@ -685,9 +686,9 @@ def test_store_update_merges_bumps_and_derives(settings: Settings) -> None:
 
 
 def test_fail_clears_the_detail_line(settings: Settings) -> None:
-    """F4: `detail` describes work happening now; a failed job must not still claim to be speaking."""
+    """`detail` describes work happening now; a failed job must not still claim to be speaking."""
     store = store_for(settings)
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     running = store.update(job_id, state="running", step="speak", detail="speaking segment 4 of 12")
     assert running["detail"] == "speaking segment 4 of 12"
 
@@ -709,15 +710,15 @@ def test_store_rejects_nonsense(settings: Settings) -> None:
     with pytest.raises(ValueError, match="source type"):
         store.create(source={"type": "torrent"}, options={"to_lang": "es"})
     with pytest.raises(ValueError, match="to_lang"):
-        store.create(source={"type": "youtube", "url": "u"}, options={})
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+        store.create(source={"type": "url", "url": "u"}, options={})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     with pytest.raises(ValueError, match="unknown job state"):
         store.mark(job_id, "sideways")  # type: ignore[arg-type]
 
 
 def test_status_json_is_replaced_atomically(settings: Settings) -> None:
     store = store_for(settings)
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     for step in ("probe", "fetch", "transcribe"):
         store.mark(job_id, "running", step=step)
     leftovers = [p.name for p in store.path(job_id).iterdir() if p.name != "status.json"]
@@ -731,7 +732,7 @@ def test_runner_reports_the_placeholder_failure(settings: Settings) -> None:
     store = store_for(settings)
     runner = JobRunner(store, settings)
     assert runner.run_fn is placeholder_run
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     try:
         runner.submit(job_id).result(timeout=10)
     finally:
@@ -750,7 +751,7 @@ def test_runner_names_the_step_that_died(settings: Settings) -> None:
         raise RuntimeError("kokoro exploded")
 
     runner = JobRunner(store, settings, run_fn=boom)
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     try:
         runner.submit(job_id).result(timeout=10)
     finally:
@@ -773,7 +774,7 @@ def test_submit_returns_immediately_and_marks_running(settings: Settings) -> Non
         store_.mark(job_id, "done", step="finish", progress=1.0)
 
     runner = JobRunner(store, settings, run_fn=slow)
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     try:
         begin = time.perf_counter()
         future = runner.submit(job_id)
@@ -800,7 +801,7 @@ def test_singletons_are_shared_per_process(settings: Settings) -> None:
 
 
 def _aged(store: JobStore, state: str, minutes: float) -> str:
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     stamp = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat(timespec="microseconds")
     status = store.require(job_id)
     status.update(state=state, created_at=stamp, updated_at=stamp)
@@ -864,7 +865,7 @@ def test_start_sweeper_runs_and_stops(settings: Settings) -> None:
     assert not handle.thread.is_alive()
 
 
-# --------------------------------------------------------------------------- F2: a broken job dir
+# --------------------------------------------------------------------------- a broken job dir
 
 
 def _write_status(store: JobStore, job_id: str, raw: str) -> None:
@@ -872,15 +873,15 @@ def _write_status(store: JobStore, job_id: str, raw: str) -> None:
 
 
 def test_sweep_survives_unreadable_status_files(settings: Settings) -> None:
-    """One job with `{}` and one holding a JSON list must not stop the pass (F2)."""
+    """One job with `{}` and one holding a JSON list must not stop the pass."""
     store = store_for(settings)
-    empty = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    empty = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     _write_status(store, empty, "{}")
-    listish = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    listish = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     _write_status(store, listish, '["not", "a", "status"]')
-    truncated = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    truncated = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     _write_status(store, truncated, '{"id": "x", "state": "do')
-    stamped = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    stamped = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     _write_status(store, stamped, '{"id": "x", "state": "done", "updated_at": "not a date"}')
     old_done = _aged(store, "done", 90)
 
@@ -891,11 +892,11 @@ def test_sweep_survives_unreadable_status_files(settings: Settings) -> None:
 
 
 def test_sweep_ages_an_unreadable_status_by_the_directory_mtime(settings: Settings) -> None:
-    """No usable timestamp: fall back to the directory's mtime and the 6 h rule (F2)."""
+    """No usable timestamp: fall back to the directory's mtime and the 6 h rule."""
     store = store_for(settings)
-    young = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    young = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     _write_status(store, young, "{}")
-    old = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    old = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     _write_status(store, old, "{}")
     stamp = time.time() - 7 * 3600
     os.utime(store.path(old), (stamp, stamp))
@@ -904,7 +905,7 @@ def test_sweep_ages_an_unreadable_status_by_the_directory_mtime(settings: Settin
     assert store.list_ids() == [young]
 
 
-# --------------------------------------------------------------------------- F3: live jobs
+# --------------------------------------------------------------------------- live jobs
 
 
 def test_sweep_never_deletes_a_job_a_worker_is_inside(settings: Settings) -> None:
@@ -927,7 +928,7 @@ def test_runner_publishes_the_jobs_it_is_running(settings: Settings) -> None:
         release.wait(10)
 
     runner = JobRunner(store, settings, run_fn=slow)
-    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    job_id = store.create(source={"type": "url", "url": "u"}, options={"to_lang": "es"})
     try:
         future = runner.submit(job_id)
         assert started.wait(5)
@@ -961,18 +962,18 @@ def test_start_sweeper_asks_the_runner_what_is_live(settings: Settings) -> None:
     handle.thread.join(timeout=5)
 
 
-# --------------------------------------------------------------------------- F1: off the event loop
+# --------------------------------------------------------------------------- off the event loop
 
 
 @pytest.mark.parametrize("name", ["health", "backends", "create_job", "job_status", "job_download"])
 def test_routes_run_in_the_threadpool_not_on_the_loop(name: str) -> None:
-    """A coroutine route would do its disk writes and its torch import on the event loop (F1)."""
+    """A coroutine route would do its disk writes and its torch import on the event loop."""
     endpoint = getattr(api_module, name)
     assert not inspect.iscoroutinefunction(endpoint), f"{name} must be a plain def"
 
 
 def test_importing_the_api_never_loads_torch_or_chatterbox() -> None:
-    """`/api/backends` must not be able to drag half a gigabyte of model code onto the loop (F1).
+    """`/api/backends` must not be able to drag half a gigabyte of model code onto the loop.
 
     Run in a subprocess: by this point in the session another test has almost certainly imported
     torch already, so only a fresh interpreter can answer the question.
@@ -1010,7 +1011,7 @@ def test_resolved_device_is_computed_once_per_settings(monkeypatch: pytest.Monke
     assert len(calls) == 2, "the cache is per instance, not global"
 
 
-# --------------------------------------------------------------------------- F6: startup imports
+# --------------------------------------------------------------------------- startup imports
 
 
 def test_pipeline_run_fn_returns_the_real_entry_point() -> None:
@@ -1025,7 +1026,7 @@ def test_pipeline_run_fn_tolerates_only_its_own_missing_module(monkeypatch: pyte
 
 
 def test_pipeline_run_fn_reraises_a_broken_install(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A missing torch must fail at startup with its own traceback, not become a silent None (F6)."""
+    """A missing torch must fail at startup with its own traceback, not become a silent None."""
     broken = types.ModuleType("respeak.pipeline.run")
 
     def _raise(name: str) -> Any:

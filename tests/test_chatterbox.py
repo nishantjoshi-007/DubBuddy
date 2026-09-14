@@ -1,4 +1,4 @@
-"""The Chatterbox cloning backend (flow.md B4.5, decisions D-07 / D-27).
+"""The Chatterbox cloning backend (docs/flow.md B4.5).
 
 Chatterbox ships as the optional `clone` extra, so almost everything here runs whether or not the
 extra is installed: the language table, the protocol shape, the pre-flight errors and the promise
@@ -123,7 +123,7 @@ def test_backend_satisfies_the_tts_protocol(backend: ChatterboxBackend) -> None:
 
 
 def test_voices_is_empty_because_the_backend_clones(backend: ChatterboxBackend) -> None:
-    """Phase 3 (flow.md B4): an empty mapping is how the UI knows to hide the voice picker."""
+    """docs/flow.md B4: an empty mapping is how the UI knows to hide the voice picker."""
     assert backend.voices() == {}
 
 
@@ -180,7 +180,7 @@ def test_the_perth_watermarker_is_repaired_even_when_perth_was_imported_first() 
 @needs_extra
 @pytest.mark.slow
 def test_the_pkg_resources_stub_does_not_outlive_the_perth_import(tmp_path: Path) -> None:
-    """F2: the stub answers `resource_filename` and nothing else, and `sys.modules` is global.
+    """the stub answers `resource_filename` and nothing else, and `sys.modules` is global.
 
     jieba — which misaki pulls in for Kokoro's Chinese voices — does `import pkg_resources` and
     then calls `pkg_resources.resource_stream()` to open its dictionary, so a stub left behind by
@@ -216,7 +216,7 @@ def test_the_pkg_resources_stub_does_not_outlive_the_perth_import(tmp_path: Path
 
 
 def test_the_stub_never_shadows_a_real_pkg_resources(monkeypatch: pytest.MonkeyPatch) -> None:
-    """F2: on a venv that still ships setuptools' pkg_resources, the stub must not be installed."""
+    """on a venv that still ships setuptools' pkg_resources, the stub must not be installed."""
     real = types.ModuleType("pkg_resources")
     monkeypatch.setitem(sys.modules, "pkg_resources", real)
     with _pkg_resources_stub():
@@ -227,7 +227,7 @@ def test_the_stub_never_shadows_a_real_pkg_resources(monkeypatch: pytest.MonkeyP
 def test_the_stub_is_installed_and_removed_again_when_nothing_provides_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """F2: inside the block perth can find `resource_filename`; outside, the name is gone again."""
+    """inside the block perth can find `resource_filename`; outside, the name is gone again."""
     monkeypatch.delitem(sys.modules, "pkg_resources", raising=False)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **kw: None)
     with _pkg_resources_stub():

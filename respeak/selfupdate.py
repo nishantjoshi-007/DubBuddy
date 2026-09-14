@@ -1,6 +1,6 @@
-"""yt-dlp self-update and the version report (plan.md 2.0, decisions D-43).
+"""yt-dlp self-update and the version report.
 
-YouTube changes its player more often than this repo is released, and a broken download is almost always
+Video sites change more often than this repo is released, and a broken download is almost always
 fixed by a newer yt-dlp. `YTDLP_AUTO_UPDATE=true` (the default inside the Docker image) therefore asks the
 installer for the newest yt-dlp at startup.
 
@@ -8,8 +8,8 @@ Nothing here raises: an update is a convenience, never a reason for the server n
 plain and synchronous; `main.py` runs :func:`update_ytdlp` in a daemon thread so startup never waits on it.
 
 Versions are read with :mod:`importlib.metadata`, which only parses the `*.dist-info` on disk — asking
-`torch.__version__` would import half a gigabyte of model code onto the web process (flow.md B2: the server
-answers in under a second).
+`torch.__version__` would import half a gigabyte of model code onto the web process (docs/flow.md B2:
+the server answers in under a second).
 """
 
 from __future__ import annotations
@@ -98,8 +98,8 @@ def update_ytdlp(timeout: int = 120) -> str | None:
     is logged and the server carries on with the yt-dlp it already has.
 
     The new code is picked up without a restart because `respeak/pipeline/inputs.py` imports `yt_dlp`
-    lazily, inside `probe_youtube()` / `fetch_youtube()`: as long as the upgrade finishes before the
-    first YouTube job is picked up by a worker thread, that job imports the new version. A job that is
+    lazily, inside `probe_url()` / `fetch_url()`: as long as the upgrade finishes before the
+    first link job is picked up by a worker thread, that job imports the new version. A job that is
     already running keeps the module it imported — that one does need a restart.
     """
     before = ytdlp_version()

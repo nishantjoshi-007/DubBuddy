@@ -1,4 +1,4 @@
-// Theme toggle. The preference lives in localStorage only (decisions.md D-31).
+// Theme toggle. The preference lives in localStorage only.
 //
 // Three states, not two. "dark" and "light" are a *choice*, stored and honoured for good; "" is no
 // choice at all, which is the default and means "whatever the operating system says". A choice is a

@@ -1,13 +1,13 @@
-"""Download everything a job needs before the first job needs it (plan.md 2.3).
+"""Download everything a job needs before the first job needs it.
 
     uv run python -m respeak.prewarm --languages en,es,fr
 
 Run from source to make the first dub fast, or at image build time with `--build-arg PREWARM=1` so a
-fresh container downloads nothing (plan.md 2.3 "Done when"). Four caches are involved:
+fresh container downloads nothing. Four caches are involved:
 
     faster-whisper weights   $HF_HOME (huggingface hub cache)   `WHISPER_MODEL`, or --whisper
     Argos packages           $XDG_DATA_HOME/argos-translate     one xx->en and one en->xx per language
-    Kokoro voices            $HF_HOME                           one curated voice per language (D-37)
+    Kokoro voices            $HF_HOME                           one curated voice per language
     unidic (Japanese G2P)    inside the installed `unidic`      only when "ja" is in the list
 
 Every step is optional and every step is tolerant: a language Argos has no package for, or a voice the
@@ -38,7 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - the real import happens inside the step 
 
 log = logging.getLogger("respeak.prewarm")
 
-#: Argos only ships `xx<->en` packages, so every pair is installed against English (flow.md B4.4).
+#: Argos only ships `xx<->en` packages, so every pair is installed against English (docs/flow.md B4.4).
 PIVOT = "en"
 
 OK = "ok"

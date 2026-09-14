@@ -1,4 +1,4 @@
-"""The TTS backends, their registry and the voice table (flow.md B4.5, plan.md 3.3).
+"""The TTS backends, their registry and the voice table (docs/flow.md B4.5).
 
 The Kokoro tests need hexgrad/Kokoro-82M plus the voices they actually speak with; those are in the
 huggingface cache on a normal dev box. When neither the cache nor the network has them the synthesis
@@ -126,7 +126,7 @@ def test_available_backends_shape(settings: Settings) -> None:
 
 
 def test_available_backends_carries_the_voice_tables(settings: Settings) -> None:
-    """The registry fills `BackendInfo.voices`; a cloning backend offers none (plan.md 3.3)."""
+    """The registry fills `BackendInfo.voices`; a cloning backend offers none."""
     infos = available_backends(settings)
     kokoro = infos["kokoro"]
     assert set(kokoro.voices) == kokoro.languages
@@ -179,7 +179,7 @@ def test_kokoro_refuses_a_language_it_cannot_speak(kokoro: KokoroBackend) -> Non
         kokoro.synthesize("Guten Tag", "de", None, Path("/tmp/never-written.wav"))
 
 
-# --- the voice table (plan.md 3.3) -------------------------------------------------------------
+# --- the voice table  -------------------------------------------------------------
 
 
 def test_the_voice_table_covers_every_language_default_first(kokoro: KokoroBackend) -> None:
@@ -255,7 +255,7 @@ def test_a_voice_from_another_language_is_refused(kokoro: KokoroBackend, tmp_pat
 
 @needs_kokoro_model
 def test_two_voices_produce_two_different_dubs(kokoro: KokoroBackend, tmp_path: Path) -> None:
-    """plan.md 3.3 "Done when": two jobs with different voices sound different (D-37)."""
+    """two jobs with different voices sound different."""
     text = "Hello, this is a dubbing test."
     default = kokoro.synthesize(text, "en", None, tmp_path / "default.wav")
     picked = kokoro.synthesize(text, "en", None, tmp_path / "adam.wav", voice="am_adam")

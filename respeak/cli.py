@@ -1,4 +1,4 @@
-"""The ``respeak`` command (flow.md B2, B6; plan.md 3.2).
+"""The ``respeak`` command (docs/flow.md B2, B6).
 
     respeak dub <url-or-file> --to es [--from en] [--backend …] [--voice ID] [--no-burn]
                               [--out PATH] [--data-dir DIR]
@@ -121,7 +121,7 @@ def _job_request(
     options["burn_subtitles"] = not args.no_burn
 
     if looks_like_url(args.input):
-        return {"type": "youtube", "url": check_source_url(args.input), "filename": None}, options, None
+        return {"type": "url", "url": check_source_url(args.input), "filename": None}, options, None
 
     path = Path(args.input).expanduser()
     if not path.is_file():
@@ -165,7 +165,7 @@ def _destination(out: str | None, status: dict[str, Any], to_lang: str) -> Path:
 
 
 def _dub(args: argparse.Namespace) -> int:
-    """Run one job to completion in this process (flow.md B6 "same run_job, progress on stderr")."""
+    """Run one job to completion in this process (docs/flow.md B6 "same run_job, progress on stderr")."""
     from .api import Rejected
     from .jobs import OUTPUT_FILENAME
     from .pipeline.ffmpeg import ensure_binaries
@@ -257,7 +257,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Transcribe, translate, re-voice, subtitle and mux one video. Progress goes to "
         "stderr; the path of the finished file is printed to stdout.",
     )
-    dub.add_argument("input", metavar="URL-OR-FILE", help="a YouTube URL, or a local video file")
+    dub.add_argument(
+        "input",
+        metavar="URL-OR-FILE",
+        help="a video link (YouTube and most other sites yt-dlp supports), or a local video file",
+    )
     dub.add_argument(
         "--to",
         dest="to_lang",

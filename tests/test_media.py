@@ -1,7 +1,7 @@
-"""ffmpeg helpers, inputs, fit/assemble, subtitles, mux (flow.md B4.1/B4.2/B4.6/B4.7/B4.8).
+"""ffmpeg helpers, inputs, fit/assemble, subtitles, mux (docs/flow.md B4.1/B4.2/B4.6/B4.7/B4.8).
 
 Every fixture is generated with ffmpeg at test time, so the suite is hermetic and offline. The one
-YouTube test only probes metadata and skips itself when the network is unreachable.
+network test only probes metadata and skips itself when the network is unreachable.
 """
 
 from __future__ import annotations
@@ -269,7 +269,7 @@ def test_enforce_duration_names_both_numbers(settings: Settings) -> None:
 
 def test_remux_turns_an_odd_container_into_source_mp4(tmp_path: Path, settings: Settings) -> None:
     made = make_video(tmp_path / "clip.mkv", seconds=3.0, size="320x240")
-    source = made.rename(tmp_path / "upload.bin")  # exactly how an upload lands on disk (D-26)
+    source = made.rename(tmp_path / "upload.bin")  # exactly how an upload lands on disk
     dest = inputs.remux(source, tmp_path / "source.mp4")
     assert dest.exists()
     probe = inputs.validate_upload(dest, settings)
@@ -327,7 +327,7 @@ def test_ensure_mp4_codecs_leaves_an_h264_file_alone(sample_video: Path, tmp_pat
 
 
 def test_remux_of_a_webm_upload_yields_a_playable_mp4(tmp_path: Path) -> None:
-    """F7: a stream copy would have put VP9 + Opus inside source.mp4, and out.mp4 after it."""
+    """a stream copy would have put VP9 + Opus inside source.mp4, and out.mp4 after it."""
     upload = make_webm(tmp_path / "clip.webm").rename(tmp_path / "upload.bin")
     dest = inputs.remux(upload, tmp_path / "source.mp4")
     assert dest == tmp_path / "source.mp4"  # the caller's filename survives the re-encode
@@ -337,7 +337,7 @@ def test_remux_of_a_webm_upload_yields_a_playable_mp4(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------------------------------
-# inputs.py — URL safety (F9)
+# inputs.py — URL safety
 # --------------------------------------------------------------------------------------------------
 
 
@@ -427,7 +427,7 @@ def test_extract_audio_reference_prefers_the_loudest_window(tmp_path: Path) -> N
 
 
 # --------------------------------------------------------------------------------------------------
-# inputs.py — the reference clip chosen from the transcript (plan.md 3.7)
+# inputs.py — the reference clip chosen from the transcript
 # --------------------------------------------------------------------------------------------------
 
 
@@ -480,7 +480,7 @@ def test_reference_from_segments_cuts_the_window_holding_the_speech(tmp_path: Pa
 
 
 def test_reference_from_segments_beats_the_loudest_window_on_a_noisy_intro(tmp_path: Path) -> None:
-    """plan.md 3.7 'done when': 20 s of loud music first, quieter speech after — speech must win."""
+    """20 s of loud music first, quieter speech after — speech must win."""
     source_wav = tmp_path / "source.wav"
     ffmpeg.run(
         [
@@ -591,7 +591,7 @@ def test_place_checks_the_lists_line_up() -> None:
 
 
 # --------------------------------------------------------------------------------------------------
-# audio.py — the video slowdown that keeps every sentence (D-49, flow.md B4.6)
+# audio.py — the video slowdown that keeps every sentence (docs/flow.md B4.6)
 # --------------------------------------------------------------------------------------------------
 
 
@@ -646,7 +646,7 @@ def test_stretch_factor_checks_its_arguments() -> None:
 
 
 def test_place_moves_every_start_onto_the_stretched_timeline() -> None:
-    """D-49: the picture is 10 % slower, so each sentence starts 10 % later and stays over its shot."""
+    """The picture is 10 % slower, so each sentence starts 10 % later and stays over its shot."""
     segments = [Segment(0.0, 2.0, "one"), Segment(2.0, 4.0, "two"), Segment(10.0, 12.0, "three")]
     fitted = [(Path("a.wav"), 1.0), (Path("b.wav"), 1.0), (Path("c.wav"), 2.0)]
     placed = audio.place(segments, fitted, stretch=1.1)
@@ -694,7 +694,7 @@ def test_assemble_trims_a_clip_that_runs_past_the_end(tmp_path: Path) -> None:
     result = audio.assemble(placed, 2.0, tmp_path / "short.wav")
     assert wav_info(result.path)[2] == pytest.approx(2.0, abs=0.005)
     assert rms(result.path, 1.1, 2.0) > 0.05
-    # F5: the caller has to be able to say that 2 s of speech was cut off.
+    # the caller has to be able to say that 2 s of speech was cut off.
     assert result.trimmed_seconds == pytest.approx(2.0, abs=0.01)
     assert (result.dropped_clips, result.dropped_seconds) == (0, 0.0)
 
@@ -932,7 +932,7 @@ def frame_count(path: Path) -> int:
 def test_mux_slows_the_picture_when_the_dub_asks_for_it(
     sample_video: Path, stretched_dub: Path, tmp_path: Path
 ) -> None:
-    """D-49: `setpts=1.12*PTS` — 12 % longer, the same frames, the cues still burned in."""
+    """`setpts=1.12*PTS` — 12 % longer, the same frames, the cues still burned in."""
     subs = subtitles.build_srt([Cue(1.12, 3.36, "Hola mundo")], tmp_path / "subs.srt")
     out = mux.mux(
         sample_video, stretched_dub, subs, burn=True, lang="es", out=tmp_path / "slow.mp4", stretch=STRETCH
@@ -1052,7 +1052,7 @@ class FakeYoutubeDL:
         shutil.copyfile(type(self).source, target)
 
 
-def test_fetch_youtube_reports_bytes_through_the_progress_hook(
+def test_fetch_url_reports_bytes_through_the_progress_hook(
     tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """3.1: yt-dlp's progress_hooks become (fraction, "downloading 3.1 MB of 7.4 MB")."""
@@ -1062,7 +1062,7 @@ def test_fetch_youtube_reports_bytes_through_the_progress_hook(
     monkeypatch.setitem(sys.modules, "yt_dlp", module)
     seen: list[tuple[float, str]] = []
 
-    out = inputs.fetch_youtube(
+    out = inputs.fetch_url(
         "https://www.youtube.com/watch?v=jNQXAC9IVRw",
         tmp_path / "job",
         settings,
@@ -1076,10 +1076,10 @@ def test_fetch_youtube_reports_bytes_through_the_progress_hook(
     assert seen[-1] == (1.0, "merging the download")
 
 
-def test_fetch_youtube_survives_a_hook_that_cannot_write(
+def test_fetch_url_survives_a_hook_that_cannot_write(
     tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed status write is cosmetic: it must never turn into "YouTube download failed"."""
+    """A failed status write is cosmetic: it must never turn into "Download failed"."""
     FakeYoutubeDL.source = make_video(tmp_path / "served.mp4", seconds=2.0, size="160x120", vcodec="libx264")
     module = types.ModuleType("yt_dlp")
     module.YoutubeDL = FakeYoutubeDL  # type: ignore[attr-defined]
@@ -1088,25 +1088,25 @@ def test_fetch_youtube_survives_a_hook_that_cannot_write(
     def explode(fraction: float, detail: str) -> None:
         raise OSError("status.json is on a full disk")
 
-    out = inputs.fetch_youtube("https://www.youtube.com/watch?v=x", tmp_path / "job", settings, explode)
+    out = inputs.fetch_url("https://www.youtube.com/watch?v=x", tmp_path / "job", settings, explode)
     assert out.is_file()
 
 
 # --------------------------------------------------------------------------------------------------
-# YouTube (network) — metadata only, never a download
+# a real link (network) — metadata only, never a download
 # --------------------------------------------------------------------------------------------------
 
 
-def test_probe_youtube_refuses_a_local_url_before_touching_the_network(settings: Settings) -> None:
-    """F9 defence in depth: the pipeline checks the URL again, not only api._validate."""
+def test_probe_url_refuses_a_local_url_before_touching_the_network(settings: Settings) -> None:
+    """Defence in depth: the pipeline checks the URL again, not only api._validate."""
     with pytest.raises(InputError, match="private network"):
-        inputs.probe_youtube("http://127.0.0.1:8000/internal.mp4", settings)
+        inputs.probe_url("http://127.0.0.1:8000/internal.mp4", settings)
 
 
 @pytest.mark.slow
 @pytest.mark.skipif(not NETWORK, reason="no network: youtube.com:443 unreachable")
-def test_probe_youtube_reads_title_and_duration(settings: Settings) -> None:
-    probe = inputs.probe_youtube(SAMPLE_URL, settings)
+def test_probe_url_reads_title_and_duration(settings: Settings) -> None:
+    probe = inputs.probe_url(SAMPLE_URL, settings)
     assert probe.has_video
     assert probe.duration == pytest.approx(19.0, abs=2.0)
     assert probe.title and "zoo" in probe.title.lower()
@@ -1114,6 +1114,93 @@ def test_probe_youtube_reads_title_and_duration(settings: Settings) -> None:
 
 @pytest.mark.slow
 @pytest.mark.skipif(not NETWORK, reason="no network: youtube.com:443 unreachable")
-def test_probe_youtube_reports_a_bad_url_clearly(settings: Settings) -> None:
+def test_probe_url_reports_a_bad_url_clearly(settings: Settings) -> None:
     with pytest.raises(InputError):
-        inputs.probe_youtube("https://www.youtube.com/watch?v=respeak_no_such_video", settings)
+        inputs.probe_url("https://www.youtube.com/watch?v=respeak_no_such_video", settings)
+
+
+# --------------------------------------------------------------------------------------------------
+# inputs.py — a link is any site yt-dlp supports, so the fetch must cope with what other sites serve
+# --------------------------------------------------------------------------------------------------
+
+
+def test_fetch_url_ends_its_format_list_with_plain_best(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A site that reports no height matches none of the capped selectors; `best` must be the last resort."""
+    FakeYoutubeDL.source = make_video(tmp_path / "served.mp4", seconds=2.0, size="160x120", vcodec="libx264")
+    module = types.ModuleType("yt_dlp")
+    module.YoutubeDL = FakeYoutubeDL  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    seen: dict[str, object] = {}
+    original_init = FakeYoutubeDL.__init__
+
+    def remember(self: FakeYoutubeDL, opts: dict[str, object]) -> None:
+        seen.update(opts)
+        original_init(self, opts)
+
+    monkeypatch.setattr(FakeYoutubeDL, "__init__", remember)
+    inputs.fetch_url("https://www.dailymotion.com/video/x5kesuj", tmp_path / "job", settings)
+
+    selectors = str(seen["format"]).split("/")
+    assert selectors[-1] == "best"
+    assert selectors[-2] == f"best[height<={settings.max_height}]"
+
+
+def test_fetch_url_refuses_a_download_with_no_video_stream(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`best` on a podcast page is a bare audio file; that must fail in words, not later in the mux."""
+    FakeYoutubeDL.source = make_tone(tmp_path / "served.wav", seconds=1.0)
+    module = types.ModuleType("yt_dlp")
+    module.YoutubeDL = FakeYoutubeDL  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+
+    with pytest.raises(InputError, match="audio only"):
+        inputs.fetch_url("https://soundcloud.com/someone/track", tmp_path / "job", settings)
+    assert not list((tmp_path / "job").glob("source.*")), "the useless download is not left behind"
+
+
+class FakeInfoDL:
+    """`yt_dlp.YoutubeDL` reduced to `extract_info`, answering with whatever the test put in `info`."""
+
+    info: dict[str, Any] = {}
+
+    def __init__(self, opts: dict[str, object]) -> None:
+        self.opts = opts
+
+    def __enter__(self) -> FakeInfoDL:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+    def extract_info(self, url: str, download: bool = True) -> dict[str, Any]:
+        assert download is False
+        return dict(type(self).info)
+
+
+@pytest.mark.parametrize(
+    ("formats", "refused"),
+    [
+        ([{"vcodec": "none"}, {"vcodec": "none"}], True),  # every format is audio: a track
+        ([{"vcodec": "none"}, {"vcodec": "avc1.64001F"}], False),  # one video format is enough
+        ([{"vcodec": None}, {"vcodec": "none"}], False),  # unknown is not "none"
+        ([], False),  # no format list at all: leave it to the download
+    ],
+)
+def test_probe_url_refuses_audio_only_links_before_any_download(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, formats: list[dict[str, Any]], refused: bool
+) -> None:
+    FakeInfoDL.info = {"title": "Episode 12", "duration": 30, "width": 0, "height": 0, "formats": formats}
+    module = types.ModuleType("yt_dlp")
+    module.YoutubeDL = FakeInfoDL  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    url = "https://93.184.216.34/episode-12"  # a public literal: no DNS, no network
+
+    if refused:
+        with pytest.raises(InputError, match="audio only"):
+            inputs.probe_url(url, settings)
+    else:
+        probe = inputs.probe_url(url, settings)
+        assert probe.duration == 30.0 and probe.title == "Episode 12"

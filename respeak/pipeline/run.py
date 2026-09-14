@@ -1,4 +1,4 @@
-"""One job, eight stages, one `out.mp4` (flow.md B4.1–B4.8, B7; plan.md 1.1, 1.10).
+"""One job, eight stages, one `out.mp4` (docs/flow.md B4.1–B4.8, B7).
 
 `run_job()` is the synchronous function :class:`respeak.jobs.JobRunner` calls in a worker thread — no
 asyncio anywhere below this line. Every stage marks itself in `status.json` *before* it does any work, so
@@ -8,11 +8,11 @@ here that a user should see: exceptions propagate, and the job ends `failed` wit
     probe .02 → fetch .10 → transcribe .30 → translate .40 → speak .60 → fit .75
               → subtitles .80 → mux .95 → finish 1.0
 
-The fit stage never cuts speech to make it fit (decisions.md D-49): when the translation runs long it
+The fit stage never cuts speech to make it fit : when the translation runs long it
 slows the *picture* down instead, and the one factor `stretch` travels from `audio.stretch_factor()`
 through `place()` and `assemble()` into `mux()`, so audio, subtitles and video share one timeline.
 
-Long stages move the bar inside their own range instead of sitting still (plan.md 3.1): fetch .02–.10,
+Long stages move the bar inside their own range instead of sitting still : fetch .02–.10,
 transcribe .30–.40, speak .60–.75, mux .80–.95 — see `STEP_RANGE`. Every stage also writes
 `status.detail`, one short sentence saying what is happening right now ("downloading 3.1 MB of 7.4 MB",
 "speaking segment 3 of 12"); it is cleared when the job finishes.
@@ -49,7 +49,7 @@ SUBS_SRT = "subs.srt"
 OUTPUT_MP4 = "out.mp4"
 SEGMENT_GLOB = "seg_*.wav"
 
-#: Everything the job directory may keep once the job is done (flow.md B7).
+#: Everything the job directory may keep once the job is done (docs/flow.md B7).
 KEPT_FILES: frozenset[str] = frozenset({OUTPUT_MP4, SUBS_SRT, "status.json"})
 
 # --------------------------------------------------------------------------------------------- stages
@@ -97,8 +97,8 @@ MIN_SLOT_SECONDS = 0.1
 #: Trimming less than this off the tail of the dub is rounding, not something to warn a user about.
 TRIM_WARNING_SECONDS = 0.25
 
-#: D-49 step 4: once the video is as slow as it may go, the sentences that still overrun are sped up
-#: this hard — fast, but still intelligible — before anything is allowed to be cut.
+#: Step 4 of the never-cut-speech rule: once the video is as slow as it may go, the sentences that
+#: still overrun are sped up this hard — fast, but still intelligible — before anything may be cut.
 LAST_RESORT_SPEEDUP = 1.5
 
 #: A slowdown smaller than this (in percent) is not worth a sentence in `warnings`.
@@ -143,13 +143,13 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
     status = store.require(job_id)
     source: dict[str, Any] = dict(status.get("source") or {})
     options: dict[str, Any] = dict(status.get("options") or {})
-    is_youtube = source.get("type") == "youtube"
+    is_url = source.get("type") == "url"
     timings: dict[str, float] = {}
     started = time.monotonic()
     log.info("job %s starting: %s → %s", job_id, source.get("type"), options.get("to_lang"))
 
     # -- probe ------------------------------------------------------------------------------------
-    with _stage(store, job_id, "probe", timings, "probing the URL" if is_youtube else "checking the file"):
+    with _stage(store, job_id, "probe", timings, "probing the URL" if is_url else "checking the file"):
         to_lang = _target_language(options)
         from_lang = _source_language(options, to_lang)
         burn = bool(options.get("burn_subtitles", True))
@@ -161,7 +161,7 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
             store.update(job_id, title=title)
 
     # -- fetch ------------------------------------------------------------------------------------
-    with _stage(store, job_id, "fetch", timings, "downloading" if is_youtube else "reading the upload"):
+    with _stage(store, job_id, "fetch", timings, "downloading" if is_url else "reading the upload"):
         source_mp4 = _fetch(source, job_dir, settings, _fetch_reporter(store, job_id))
         _report(store, job_id, "fetch", 1.0, "extracting the audio")
         source_wav, reference_wav = inputs.extract_audio(source_mp4, job_dir)
@@ -213,7 +213,7 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
     with _stage(store, job_id, "fit", timings, "fitting the audio to the video"):
         slots = [max(segment.end - segment.start, MIN_SLOT_SECONDS) for segment in spoken]
         fitted = _fit_clips(clips, slots, job_dir, hi=settings.max_speech_speedup)
-        # D-49: how much slower the picture would have to run for every sentence to fit whole.
+        # How much slower the picture would have to run for every sentence to fit whole.
         stretch = audio.stretch_factor(spoken, [seconds for _, seconds in fitted], video_seconds)
         speech_cap = settings.max_speech_speedup
         if stretch > settings.max_video_stretch:
@@ -284,13 +284,13 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
 def _probe(source: dict[str, Any], job_dir: Path, settings: Settings) -> Probe:
     """B4.1: metadata before any download, and the duration cap enforced for both source types."""
     kind = source.get("type")
-    if kind == "youtube":
-        probe = inputs.probe_youtube(_require_url(source), settings)
-        inputs.enforce_duration(probe, settings)  # probe_youtube does not enforce it itself
+    if kind == "url":
+        probe = inputs.probe_url(_require_url(source), settings)
+        inputs.enforce_duration(probe, settings)  # probe_url does not enforce it itself
         return probe
     if kind == "upload":
         return inputs.validate_upload(job_dir / UPLOAD_FILENAME, settings)  # enforces the cap itself
-    raise PipelineError(f"unknown source type {kind!r}; expected 'youtube' or 'upload'")
+    raise PipelineError(f"unknown source type {kind!r}; expected 'url' or 'upload'")
 
 
 def _fetch(
@@ -301,8 +301,8 @@ def _fetch(
 ) -> Path:
     """B4.2: either source type ends as `<jobdir>/source.mp4`."""
     kind = source.get("type")
-    if kind == "youtube":
-        return inputs.fetch_youtube(_require_url(source), job_dir, settings, progress)
+    if kind == "url":
+        return inputs.fetch_url(_require_url(source), job_dir, settings, progress)
     upload = job_dir / UPLOAD_FILENAME
     if not upload.is_file():
         raise PipelineError(f"the uploaded file is missing from {job_dir}")
@@ -318,7 +318,7 @@ def _reference(
     fallback: Path,
     job_dir: Path,
 ) -> Path | None:
-    """The speaker clip for a cloning backend: the busiest 30 s of speech (plan.md 3.7), else None.
+    """The speaker clip for a cloning backend: the busiest 30 s of speech , else None.
 
     Backends that do not clone get None and the cut is skipped, which saves the second it costs.
     Without segments — which `run_job` never allows this far — the loudest-window clip from
@@ -342,7 +342,7 @@ def _fit_clips(
 ) -> list[tuple[Path, float]]:
     """B4.6: speed each spoken clip towards its slot, at most by `hi`; return (path, real length).
 
-    Every pass starts from the *original* clip, so raising the cap on the second pass (D-49 step 4)
+    Every pass starts from the *original* clip, so raising the cap on the second pass
     speeds that sentence up 1.5× in total, not 1.3 × 1.5. With `keep`, the clips that already fit
     their (new, stretched) target are left exactly as they were and only the overrunning ones are
     re-encoded — usually one or two of them.
@@ -511,7 +511,7 @@ def _target_language(options: dict[str, Any]) -> str:
 
 
 def _source_language(options: dict[str, Any], to_lang: str) -> str | None:
-    """The Advanced-fold override, or None for auto-detection (flow.md B4.3, D-32)."""
+    """The Advanced-fold override, or None for auto-detection (docs/flow.md B4.3)."""
     raw = options.get("from_lang")
     if raw is None or not str(raw).strip():
         return None
@@ -521,7 +521,7 @@ def _source_language(options: dict[str, Any], to_lang: str) -> str | None:
 
 
 def _voice(options: dict[str, Any]) -> str | None:
-    """The voice id picked in the form, or None for the backend's default (flow.md B5, plan.md 3.3)."""
+    """The voice id picked in the form, or None for the backend's default (docs/flow.md B5)."""
     raw = options.get("voice")
     if raw is None:
         return None
@@ -538,7 +538,7 @@ def _check_pair(src: str, dst: str) -> None:
 def _require_url(source: dict[str, Any]) -> str:
     url = str(source.get("url") or "").strip()
     if not url:
-        raise PipelineError("this job is a YouTube job but carries no URL")
+        raise PipelineError("this job is a link job but carries no URL")
     return url
 
 
@@ -549,7 +549,7 @@ def _fallback_title(source: dict[str, Any]) -> str | None:
 
 
 def _video_seconds(source_mp4: Path, probe: Probe) -> float:
-    """The real length of the downloaded file; YouTube's metadata duration is only a hint."""
+    """The real length of the downloaded file; the site's metadata duration is only a hint."""
     try:
         seconds = ffmpeg.duration(source_mp4)
     except Exception as exc:  # pragma: no cover - ffprobe already read this file once
@@ -573,9 +573,9 @@ def _translated_segments(segments: list[Segment], texts: list[str]) -> list[Segm
 def _cues(placed: list[Placed], total_seconds: float) -> list[Cue]:
     """B4.7: the subtitle times are the times the dubbed clips actually got, clipped to the picture.
 
-    A cue can only run past the end when speech had to be cut after all (D-49's last resort), and a
-    subtitle that outlives the video makes the finished file *claim* a length the picture does not
-    have — mp4 duration is the longest stream, subtitles included.
+    A cue can only run past the end when speech had to be cut after all (the fit stage's last
+    resort), and a subtitle that outlives the video makes the finished file *claim* a length the
+    picture does not have — mp4 duration is the longest stream, subtitles included.
     """
     cues: list[Cue] = []
     for item in placed:
@@ -592,7 +592,7 @@ def fit_warnings(
     speech_cap: float,
     assembled: audio.AssembleResult,
 ) -> list[str]:
-    """Everything the browser should be told about the timeline, in the order it should read it (D-49).
+    """Everything the browser should be told about the timeline, in the order it should read it.
 
     One informational line when the picture was slowed, then — only if speech *still* did not fit,
     which the cap makes rare — the sentences that ran off the end and how much was lost.

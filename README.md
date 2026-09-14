@@ -4,9 +4,13 @@
 
 Dub any video into another language on your own machine.
 
-Give Respeak a YouTube URL or a video file and a target language. It transcribes the speech, translates
+Give Respeak a video link or a video file and a target language. It transcribes the speech, translates
 it, re-voices it with an open-source text-to-speech model, builds subtitles, and hands back an MP4 with
 the new audio and a subtitle track. Everything runs locally; there is no paid API anywhere.
+
+Links are fetched by yt-dlp, so YouTube, TikTok, Reddit, Dailymotion, Bilibili and
+[most other sites it supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) work.
+YouTube is the one I test regularly; a site that asks you to sign in needs `YTDLP_COOKIES_FILE`.
 
 ```text
 video ──▶ transcribe (faster-whisper) ──▶ translate (Argos) ──▶ speak (Kokoro | Chatterbox)
@@ -101,14 +105,14 @@ Every setting is an environment variable or a line in `.env`. Defaults in `.env.
 | `WHISPER_MODEL` | `small` | `base` (fast), `small`, `medium`, `large-v3-turbo`, `large-v3` |
 | `MAX_VIDEO_SECONDS` | `900` | reject longer videos before downloading |
 | `MAX_UPLOAD_MB` | `500` | upload size cap |
-| `MAX_HEIGHT` | `720` | YouTube download resolution cap |
+| `MAX_HEIGHT` | `720` | download resolution cap |
 | `MAX_CONCURRENT_JOBS` | `1` | jobs are CPU-bound; raise only with cores to spare |
 | `JOB_TTL_MINUTES` | `60` | finished jobs are deleted after this |
 | `MAX_SPEECH_SPEEDUP` | `1.3` | how much faster a sentence may be spoken to fit its slot |
 | `MAX_VIDEO_STRETCH` | `1.15` | how much the video may be slowed so all speech fits; speech is never cut before this is exhausted |
 | `DATA_DIR` | `./data` | where jobs live (never served as static files) |
-| `ALLOW_UPLOADS` | `true` | set `false` to accept YouTube URLs only |
-| `YTDLP_COOKIES_FILE` | unset | Netscape cookies file for YouTube's "confirm you're not a bot" wall |
+| `ALLOW_UPLOADS` | `true` | set `false` to accept links only |
+| `YTDLP_COOKIES_FILE` | unset | Netscape cookies file for sites that ask you to sign in or to prove you're not a bot |
 | `YTDLP_AUTO_UPDATE` | `false` (`true` in Docker) | update yt-dlp at startup |
 | `RATE_LIMIT_JOBS` | unset | per-address submission limit for public servers, e.g. `10/hour` |
 | `TRUST_PROXY` | `false` | honour `X-Forwarded-For` for the rate limit, only behind a reverse proxy (`respeak serve` passes the matching `--forwarded-allow-ips` to uvicorn; with plain uvicorn set it yourself) |
@@ -122,8 +126,9 @@ transcription five to ten times faster and makes Chatterbox usable.
 
 ## How it works
 
-`flow.md` describes the request path, the pipeline stages and the on-disk job state. `decisions.md`
-records every design choice, what was rejected and why, and the measurements behind them.
+`docs/flow.md` describes the request path, the pipeline stages and the on-disk job state.
+`docs/decisions.md` records the design choices, what was rejected and why, and the measurements
+behind them.
 
 ## Contributing
 
@@ -131,7 +136,7 @@ Contributions are appreciated. Open an issue for a bug or an idea, or send a pul
 `main`. Before you open one, run `uv run ruff check`, `uv run ruff format --check` and
 `uv run pytest -m "not slow"`; that is exactly what CI runs on Python 3.12, 3.13 and 3.14. Keep a
 change small and add a test for what it changes. I keep Respeak to two TTS backends on purpose, so a
-new backend is the one kind of change I will turn down; `decisions.md` records why.
+new backend is the one kind of change I will turn down; `docs/decisions.md` records why.
 
 ## Responsible use
 

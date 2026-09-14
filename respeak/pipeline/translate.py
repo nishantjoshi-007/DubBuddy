@@ -1,4 +1,4 @@
-"""Translation behind one interface, with Argos as the offline implementation (flow.md B4.4, D-36).
+"""Translation behind one interface, with Argos as the offline implementation (docs/flow.md B4.4).
 
 Argos ships only `xx↔en` packages, so every non-English pair goes through English: install `src→en` and
 `en→dst` and `Language.get_translation()` hands back the composed pivot.  Installs are lazy (nobody wants

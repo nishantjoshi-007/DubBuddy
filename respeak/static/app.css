@@ -1,4 +1,4 @@
-/* Respeak — the finished look (flow.md B6; decisions D-28/D-29/D-31/D-34).
+/* Respeak — the finished look (docs/flow.md B6).
    No framework, no build step, no external assets: system fonts, one stylesheet, one accent.
 
    The idea: an editing suite. A single calm column of cool greys, one accent borrowed from
@@ -586,7 +586,7 @@ video {
   margin-top: 1.5rem;
 }
 
-/* Warnings: the job worked, but the user should know something (flow.md B5). */
+/* Warnings: the job worked, but the user should know something (docs/flow.md B5). */
 .notice {
   display: flex;
   gap: 0.8rem;

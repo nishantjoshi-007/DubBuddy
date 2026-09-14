@@ -1,9 +1,9 @@
-// Respeak single-page frontend (flow.md B3/B5/B6; decisions D-29…D-34).
+// Respeak single-page frontend (docs/flow.md B3/B5/B6).
 // No framework, no build step, no external resources. Loaded as a module, so the DOM is ready.
 
 const POLL_MS = 3000;
 
-// The pipeline's stages, in order (flow.md B4.1…B4.8 plus the finish step).
+// The pipeline's stages, in order (docs/flow.md B4.1…B4.8 plus the finish step).
 const STEPS = [
   ["probe", "Inspect the source"],
   ["fetch", "Fetch the video"],
@@ -50,9 +50,9 @@ const dom = {
   formPanel: el("form-panel"),
   form: el("job-form"),
   sourceType: el("source-type"),
-  tabYoutube: el("tab-youtube"),
+  tabUrl: el("tab-url"),
   tabUpload: el("tab-upload"),
-  panelYoutube: el("source-youtube"),
+  panelUrl: el("source-url"),
   panelUpload: el("source-upload"),
   url: el("url"),
   file: el("file"),
@@ -174,7 +174,7 @@ async function loadBackends() {
   fillSourceLanguages(sources);
 
   show(dom.tabUpload, data.allow_uploads === true);
-  if (data.allow_uploads !== true && dom.sourceType.value === "upload") selectSource("youtube");
+  if (data.allow_uploads !== true && dom.sourceType.value === "upload") selectSource("url");
 
   const all = Array.isArray(data.backends) ? data.backends : [];
   state.backends = all
@@ -225,7 +225,7 @@ function fillBackends(preferred) {
   }
   const wanted = state.backends.some((b) => b.name === preferred) ? preferred : state.backends[0].name;
   dom.backend.value = wanted;
-  // The selector only earns screen space when there is a real choice (flow.md B6).
+  // The selector only earns screen space when there is a real choice (docs/flow.md B6).
   show(dom.backendField, state.backends.length > 1);
 }
 
@@ -264,7 +264,7 @@ function fillTargetLanguages() {
   fillVoices();
 }
 
-/** The voices the chosen backend offers for the chosen language (flow.md B6, Phase 3.3). */
+/** The voices the chosen backend offers for the chosen language (docs/flow.md B6). */
 function voicesFor(backend, lang) {
   if (!backend || !lang) return [];
   const list = backend.voices ? backend.voices[lang] : null;
@@ -388,17 +388,17 @@ async function onPreviewClick() {
 
 function selectSource(kind) {
   const upload = kind === "upload";
-  dom.sourceType.value = upload ? "upload" : "youtube";
+  dom.sourceType.value = upload ? "upload" : "url";
 
-  dom.tabYoutube.classList.toggle("is-active", !upload);
+  dom.tabUrl.classList.toggle("is-active", !upload);
   dom.tabUpload.classList.toggle("is-active", upload);
-  dom.tabYoutube.setAttribute("aria-selected", String(!upload));
+  dom.tabUrl.setAttribute("aria-selected", String(!upload));
   dom.tabUpload.setAttribute("aria-selected", String(upload));
   // Roving tabindex: one stop for the whole tablist, arrow keys move between the tabs.
-  dom.tabYoutube.tabIndex = upload ? -1 : 0;
+  dom.tabUrl.tabIndex = upload ? -1 : 0;
   dom.tabUpload.tabIndex = upload ? 0 : -1;
 
-  show(dom.panelYoutube, !upload);
+  show(dom.panelUrl, !upload);
   show(dom.panelUpload, upload);
   // Disabled controls stay out of the FormData, so only the active source is ever sent.
   dom.url.disabled = upload;
@@ -409,9 +409,9 @@ function onTabKey(event) {
   if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
   if (dom.tabUpload.hidden) return; // only one tab to stand on
   event.preventDefault();
-  const next = dom.sourceType.value === "upload" ? "youtube" : "upload";
+  const next = dom.sourceType.value === "upload" ? "url" : "upload";
   selectSource(next);
-  (next === "upload" ? dom.tabUpload : dom.tabYoutube).focus();
+  (next === "upload" ? dom.tabUpload : dom.tabUrl).focus();
 }
 
 // ---------------------------------------------------------------- submit
@@ -441,8 +441,8 @@ async function onSubmit(event) {
   const body = new FormData(dom.form);
   // An unchecked checkbox is simply absent from a FormData, which would read as "use the default".
   body.set("burn_subtitles", dom.burn.checked ? "true" : "false");
-  if (!body.get("from_lang")) body.delete("from_lang"); // "" means auto-detect (D-32)
-  if (!body.get("voice")) body.delete("voice"); // "" means the backend's own default (Phase 3.3)
+  if (!body.get("from_lang")) body.delete("from_lang"); // "" means auto-detect
+  if (!body.get("voice")) body.delete("voice"); // "" means the backend's own default
   if (!upload) body.set("url", dom.url.value.trim());
 
   setSubmitting(true);
@@ -572,7 +572,7 @@ function renderProgress(job) {
   else if (job.state === "queued") setText(dom.statusLine, "Queued — waiting for a free worker.");
   else setText(dom.statusLine, `${stepLabel || "Working"} — ${percent}%`);
 
-  // `detail` is the stage's own running commentary: "segment 4 of 12" (flow.md B5, Phase 3.1).
+  // `detail` is the stage's own running commentary: "segment 4 of 12" (docs/flow.md B5).
   const detail = typeof job.detail === "string" ? job.detail.trim() : "";
   setText(dom.jobDetail, detail);
   show(dom.jobDetail, detail !== "" && job.state !== "done");
@@ -703,9 +703,9 @@ async function poll() {
 // ---------------------------------------------------------------- wiring
 
 buildSteps();
-dom.tabYoutube.addEventListener("click", () => selectSource("youtube"));
+dom.tabUrl.addEventListener("click", () => selectSource("url"));
 dom.tabUpload.addEventListener("click", () => selectSource("upload"));
-dom.tabYoutube.addEventListener("keydown", onTabKey);
+dom.tabUrl.addEventListener("keydown", onTabKey);
 dom.tabUpload.addEventListener("keydown", onTabKey);
 dom.backend.addEventListener("change", fillTargetLanguages);
 dom.toLang.addEventListener("change", fillVoices);
@@ -715,7 +715,7 @@ dom.sample.addEventListener("ended", stopPreview);
 dom.form.addEventListener("submit", onSubmit);
 window.addEventListener("popstate", () => window.location.reload());
 
-selectSource("youtube");
+selectSource("url");
 
 const initialJobId = document.body.dataset.jobId || "";
 if (initialJobId) {

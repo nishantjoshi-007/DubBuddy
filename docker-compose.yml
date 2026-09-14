@@ -1,4 +1,4 @@
-# Respeak — plan.md 2.2, decisions D-22 (this is the headline install path), D-25 (GPU is a profile).
+# Respeak — this is the headline install path; the GPU is a profile.
 #
 #   docker compose up                              CPU, http://localhost:8000
 #   docker compose build --build-arg PREWARM=1     download the models into the image instead
@@ -49,7 +49,7 @@ services:
       # bake the models in: docker compose build --build-arg PREWARM=1
     image: respeak:local
 
-  # D-25: CUDA is a build-arg, not an extra. Untested here (this machine has a driver mismatch, D-16).
+  # CUDA is a build-arg, not an extra. Untested here (this machine has a driver mismatch).
   respeak-gpu:
     <<: *respeak-common
     profiles: ["gpu"]

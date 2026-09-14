@@ -1,4 +1,4 @@
-"""The `respeak` command (flow.md B2, B6; plan.md 3.2).
+"""The `respeak` command (docs/flow.md B2, B6).
 
 Everything here is offline and instant except `test_dub_writes_a_playable_file`, which runs the whole
 pipeline on `tests/fixtures/sample.mp4` with the `base` Whisper model; it skips when the caches it
@@ -21,7 +21,7 @@ from respeak.jobs import JobStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_MP4 = FIXTURES / "sample.mp4"
-WHISPER_MODEL = "base"  # cached on the dev machine; `small` is the product default (D-06)
+WHISPER_MODEL = "base"  # cached on the dev machine; `small` is the product default
 KOKORO_FILES = ("config.json", "kokoro-v1_0.pth", "voices/af_heart.pt", "voices/ef_dora.pt")
 
 
@@ -111,7 +111,7 @@ def _subparser_help(parser: argparse.ArgumentParser, name: str) -> str:
 
 
 def test_dub_help_documents_every_flag() -> None:
-    """plan.md 3.2 "Done when": `--help` documents every flag."""
+    """`--help` documents every flag."""
     dub_help = _subparser_help(cli.build_parser(), "dub")
     for flag in ("--to", "--from", "--backend", "--voice", "--no-burn", "--out", "--data-dir"):
         assert flag in dub_help, f"{flag} is undocumented"
@@ -208,7 +208,7 @@ def test_dub_refuses_an_unknown_voice_and_names_the_real_ones(
 
 
 def test_dub_refuses_a_url_that_is_not_public(env: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """F9 again: yt-dlp would fetch whatever this machine can reach, CLI or not."""
+    """yt-dlp would fetch whatever this machine can reach, CLI or not."""
     assert run("dub", "http://127.0.0.1:8000/secret", "--to", "es") == 1
     assert capsys.readouterr().err.startswith("error: ")
 
@@ -271,7 +271,7 @@ def test_a_local_file_is_linked_not_copied_when_it_can_be(tmp_path: Path) -> Non
 @needs_everything
 @pytest.mark.slow
 def test_dub_writes_a_playable_file(env: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """plan.md 3.2 "Done when": `respeak dub <file> --to es --out …` produces a file, offline."""
+    """`respeak dub <file> --to es --out …` produces a file, offline."""
     from respeak.pipeline import ffmpeg
 
     out = env / "dubbed.mp4"

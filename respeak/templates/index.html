@@ -44,7 +44,7 @@
       <p class="alert">Respeak needs JavaScript: the page submits the job and follows its progress in the browser.</p>
     </noscript>
 
-    <!-- Job form (flow.md B6). Replaced in place by the job view once a job is running. -->
+    <!-- Job form (docs/flow.md B6). Replaced in place by the job view once a job is running. -->
     <section class="intro" aria-label="What Respeak does">
       <h1 class="intro__title">Dub a video into another language.</h1>
       <p class="intro__text">Paste a link or upload a file. Respeak transcribes, translates, re-voices and subtitles it on your own machine.</p>
@@ -52,19 +52,22 @@
 
     <section id="form-panel">
       <form class="card" id="job-form" novalidate>
-        <input type="hidden" name="source_type" id="source-type" value="youtube" />
+        <input type="hidden" name="source_type" id="source-type" value="url" />
 
         <div class="seg" role="tablist" aria-label="Video source">
-          <button type="button" class="seg__btn is-active" id="tab-youtube" role="tab" aria-selected="true"
-                  aria-controls="source-youtube" data-source="youtube">Video link</button>
+          <button type="button" class="seg__btn is-active" id="tab-url" role="tab" aria-selected="true"
+                  aria-controls="source-url" data-source="url">Video link</button>
           <button type="button" class="seg__btn" id="tab-upload" role="tab" aria-selected="false"
                   aria-controls="source-upload" data-source="upload" tabindex="-1" hidden>Upload a file</button>
         </div>
 
-        <div class="source" id="source-youtube" role="tabpanel" aria-labelledby="tab-youtube">
+        <div class="source" id="source-url" role="tabpanel" aria-labelledby="tab-url">
           <label class="label" for="url">Video URL</label>
           <input class="control" type="url" id="url" name="url" autocomplete="off" spellcheck="false"
-                 placeholder="https://www.youtube.com/watch?v=..." />
+                 placeholder="https://..." />
+          <p class="hint">YouTube, TikTok, Reddit, Dailymotion, Bilibili and
+            <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md" target="_blank"
+               rel="noopener">most other sites yt-dlp supports</a>.</p>
         </div>
 
         <div class="source" id="source-upload" role="tabpanel" aria-labelledby="tab-upload" hidden>
@@ -85,7 +88,7 @@
             <label class="label" for="voice">Voice</label>
             <div class="voice-row">
               <select class="control control--select" id="voice" name="voice" disabled></select>
-              {# A name tells you nothing about a voice, so the picker can play one (plan.md 3.3). #}
+              {# A name tells you nothing about a voice, so the picker can play one. #}
               <button type="button" class="preview" id="voice-preview" data-state="idle"
                       aria-label="Preview this voice" aria-busy="false" disabled>
                 <svg class="preview__icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"

@@ -1,11 +1,11 @@
 """One ffmpeg call turns the source video + `dubbed.wav` + `subs.srt` into `out.mp4`.
 
-flow.md B4.8, plan.md 1.9, decisions.md D-05 (ffmpeg + libass, never OpenCV) and D-10 (burn when the
-checkbox is on, and always attach a soft `mov_text` track).
+docs/flow.md B4.8: ffmpeg + libass, never OpenCV; burn when the checkbox is on, and always
+attach a soft `mov_text` track.
 
     burn on   [0:v:0] → subtitles=…:force_style='FontName=Noto Sans,Outline=1,MarginV=30' → libx264
     burn off  -map 0:v:0 -c:v copy                                            (no video re-encode)
-    stretch   [0:v:0] → setpts=s*PTS[,subtitles=…] → libx264                  (D-49; never a copy)
+    stretch   [0:v:0] → setpts=s*PTS[,subtitles=…] → libx264                  (never a copy)
 """
 
 from __future__ import annotations
@@ -45,16 +45,16 @@ def mux(
 ) -> Path:
     """Mux video + dubbed audio (+ subtitles) into `out` and return it.
 
-    `stretch > 1` slows the picture down by that factor so the dub fits without cutting speech
-    (D-49): `setpts=<stretch>*PTS` (chained before `subtitles` when burning, so the cues land on the
-    stretched times they were written for) and the output runs `stretch ×` the source length. **A
-    stretched video is always re-encoded**, with burn off too — a filter and `-c:v copy` cannot both
-    apply, so the stream copy that burn=False normally buys is not available here. The frames
-    themselves are not touched, only their timestamps: the output keeps every source frame and plays
-    at a lower rate.
+     `stretch > 1` slows the picture down by that factor so the dub fits without cutting speech
+    : `setpts=<stretch>*PTS` (chained before `subtitles` when burning, so the cues land on the
+     stretched times they were written for) and the output runs `stretch ×` the source length. **A
+     stretched video is always re-encoded**, with burn off too — a filter and `-c:v copy` cannot both
+     apply, so the stream copy that burn=False normally buys is not available here. The frames
+     themselves are not touched, only their timestamps: the output keeps every source frame and plays
+     at a lower rate.
 
-    With `progress`, ffmpeg is run with `-progress pipe:1` and the callback follows `out_time`
-    through the encode (plan.md 3.1); without it the call is the plain, silent one it always was.
+     With `progress`, ffmpeg is run with `-progress pipe:1` and the callback follows `out_time`
+     through the encode ; without it the call is the plain, silent one it always was.
     """
     source = Path(source_mp4)
     audio = Path(dubbed_wav)

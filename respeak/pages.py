@@ -1,4 +1,4 @@
-"""HTML pages. One template serves both the home page and a job page (flow.md B6)."""
+"""HTML pages. One template serves both the home page and a job page (docs/flow.md B6)."""
 
 from __future__ import annotations
 

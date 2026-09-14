@@ -1,4 +1,4 @@
-# Respeak CI — plan.md 4.1.
+# Respeak CI.
 #
 # Two jobs. `test` is the one that gates a change: the locked environment on 3.12/3.13/3.14, ruff,
 # and the offline test suite. `docker` builds the image in a job of its own, so a red image build is
@@ -102,7 +102,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # amd64 only. The arm64 half of plan.md 2.5 would have to build under qemu emulation here, and
+      # amd64 only. An arm64 image would have to build under qemu emulation here, and
       # a torch install under emulation does not finish in a sane time; leave it to a real arm host.
       # PREWARM=0 keeps the models out of the image, so this builds the layers, not a gigabyte of
       # weights. push/load false: nothing is published or unpacked, the point is that it builds.

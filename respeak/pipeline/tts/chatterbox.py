@@ -1,4 +1,4 @@
-"""Chatterbox Multilingual, the optional cloning backend (flow.md B4.5, decisions D-07 / D-27).
+"""Chatterbox Multilingual, the optional cloning backend (docs/flow.md B4.5).
 
 MIT, ~500M parameters, 23 languages, zero-shot cloning from `reference.wav` — and a GPU in
 practice. It ships as the `clone` extra, so it is usually absent: nothing here is imported at
@@ -54,7 +54,7 @@ def _pkg_resources_stub() -> Iterator[None]:
     perth uses it once, to find a directory inside its own package, so we supply exactly that
     rather than drop the watermark or pin setuptools back.
 
-    Why a context manager and not a one-way `sys.modules` entry (review finding F2): the stub
+    Why a context manager and not a one-way `sys.modules` entry: the stub
     answers to `resource_filename` and nothing else, and it is *global*. jieba — which misaki
     pulls in for Kokoro's Chinese voices — starts with `import pkg_resources` and then calls
     `pkg_resources.resource_stream` to open its dictionary, so a leaked stub turned every `zh`
@@ -191,7 +191,7 @@ class ChatterboxBackend:
         """Always empty: Chatterbox has no preset voices, it clones the speaker in `reference.wav`.
 
         `available_backends()` reports this as `voices: {}`, which is how the UI knows to hide the
-        voice picker for this backend (flow.md B4).
+        voice picker for this backend (docs/flow.md B4).
         """
         return {}
 

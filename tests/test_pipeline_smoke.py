@@ -1,4 +1,4 @@
-"""The whole pipeline on a checked-in clip (flow.md B4.1–B4.8, B5, B7; plan.md 1.1, 1.10, 1.12).
+"""The whole pipeline on a checked-in clip (docs/flow.md B4.1–B4.8, B5, B7).
 
 Offline once the caches the README describes exist (whisper `base`, Kokoro-82M, the Argos en->es
 package); without them and without the network every test here skips instead of failing.
@@ -47,7 +47,7 @@ ffmpeg.ensure_binaries()
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_MP4 = FIXTURES / "sample.mp4"
-WHISPER_MODEL = "base"  # cached on the dev machine; `small` is the product default (D-06)
+WHISPER_MODEL = "base"  # cached on the dev machine; `small` is the product default
 KOKORO_FILES = ("config.json", "kokoro-v1_0.pth", "voices/af_heart.pt", "voices/ef_dora.pt")
 
 #: Words that appear in almost any Spanish sentence; the SRT must not still be English.
@@ -226,7 +226,7 @@ def test_burn_off_copies_the_video_stream(settings: Settings, store: JobStore) -
 
 
 # --------------------------------------------------------------------------------------------------
-# per-stage progress and detail (plan.md 3.1) — the real media path, fake models, so this always runs
+# per-stage progress and detail  — the real media path, fake models, so this always runs
 # --------------------------------------------------------------------------------------------------
 
 
@@ -355,7 +355,7 @@ def test_every_stage_writes_a_detail_and_the_bar_only_moves_forward(
 def test_the_fetch_bar_keeps_talking_through_every_file_yt_dlp_downloads(
     settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F3: yt-dlp downloads the video, then the audio, then merges — all through one writer.
+    """yt-dlp downloads the video, then the audio, then merges — all through one writer.
 
     The first file reaching 1.0 pins the bar at the top of the fetch range, so throttling on
     "has the bar moved?" alone silently dropped every sentence after it and the page froze on
@@ -389,7 +389,7 @@ def test_the_fetch_bar_keeps_talking_through_every_file_yt_dlp_downloads(
 def test_the_bar_reaches_the_top_of_the_speak_and_mux_ranges(
     settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F6: speak reported only `(i-1)/n`, so it handed over a whole segment short of its range,
+    """speak reported only `(i-1)/n`, so it handed over a whole segment short of its range,
     and mux's closing `progress(1.0)` was thrown away by the throttle a fraction below 0.95."""
     backend = FakeBackend()
     fake_models(monkeypatch, backend)
@@ -467,7 +467,7 @@ def test_a_backend_that_cannot_clone_never_pays_for_a_reference_cut(
 
 
 # --------------------------------------------------------------------------------------------------
-# warnings (F5) — a dub that did not fit must say so; no model needed
+# warnings — a dub that did not fit must say so; no model needed
 # --------------------------------------------------------------------------------------------------
 
 
@@ -484,7 +484,7 @@ def test_assemble_warnings_name_the_segments_and_the_seconds() -> None:
     messages = assemble_warnings(result)
     assert len(messages) == 2
     assert messages[0] == ("3 segments (12.4 s of speech) did not fit before the video ended and were cut.")
-    # D-49: the sentence says what was *cut*, not how much longer than the video the dub was.
+    # The sentence says what was *cut*, not how much longer than the video the dub was.
     assert messages[1] == "The last 1.5 s of speech were cut to fit the video."
     assert all(message.endswith(".") for message in messages)
 
@@ -499,7 +499,7 @@ def test_assemble_warnings_count_one_segment_in_the_singular() -> None:
 def test_a_dub_that_does_not_fit_is_reported_in_the_status(
     settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The job still finishes, but status.warnings tells the browser what was cut (F5)."""
+    """The job still finishes, but status.warnings tells the browser what was cut."""
     from respeak.pipeline import audio as audio_module
 
     real_assemble = audio_module.assemble
@@ -521,7 +521,7 @@ def test_a_dub_that_does_not_fit_is_reported_in_the_status(
 
 
 # --------------------------------------------------------------------------------------------------
-# D-49 — speech that does not fit slows the video down instead of being cut (no model needed)
+# never cut speech — speech that does not fit slows the video down instead of being cut (no model needed)
 # --------------------------------------------------------------------------------------------------
 
 STARTS: tuple[float, ...] = tuple(start for start, _, _ in FAKE_SEGMENTS)
@@ -563,7 +563,7 @@ class RatioBackend(FakeBackend):
 
 
 def expected_stretch(ratio: float, cap: float, video_seconds: float) -> float:
-    """D-49's closed form, worked out here from the fake clip lengths instead of from `audio`.
+    """The slowdown's closed form, worked out here from the fake clip lengths instead of from `audio`.
 
     A clip `ratio ×` its slot is sped up by at most `cap`, so it still covers `ratio / cap` slots;
     `s` is then the worst `Σ_{j≥i} d_j / (V − start_i)` over the sentences.
@@ -580,7 +580,7 @@ def expected_stretch(ratio: float, cap: float, video_seconds: float) -> float:
 def test_speech_that_overruns_slows_the_video_instead_of_being_cut(
     settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-49 steps 1–3: clips 1.7× their slots survive whole because the picture runs ~8 % slower.
+    """Steps 1–3: clips 1.7× their slots survive whole because the picture runs ~8 % slower.
 
     (1.25× — the average English → Hindi expansion — needs no slowdown at all here: the 1.3× speech
     cap and the pauses between the sentences already swallow it. It takes ~1.6× to move the picture.)
@@ -604,7 +604,7 @@ def test_speech_that_overruns_slows_the_video_instead_of_being_cut(
 
     out = job_dir / OUTPUT_MP4
     measured = ffmpeg.duration(out)
-    print(f"\n[D-49 fits] s={stretch:.4f} source={video_seconds:.2f}s out={measured:.2f}s")
+    print(f"\n[slowdown fits] s={stretch:.4f} source={video_seconds:.2f}s out={measured:.2f}s")
     assert measured == pytest.approx(stretch * video_seconds, abs=0.2)
     assert measured > video_seconds + 0.3  # the picture really is longer than it was
 
@@ -617,7 +617,7 @@ def test_speech_that_overruns_slows_the_video_instead_of_being_cut(
 def test_speech_that_overruns_even_the_slowest_video_is_named_in_the_warnings(
     settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-49 step 4: the cap holds at 15 %, speech goes to 1.5×, and what is still lost is named."""
+    """Step 4: the cap holds at 15 %, speech goes to 1.5×, and what is still lost is named."""
     backend = RatioBackend(3.5)
     fake_models(monkeypatch, backend)
     video_seconds = ffmpeg.duration(SAMPLE_MP4)
@@ -639,7 +639,7 @@ def test_speech_that_overruns_even_the_slowest_video_is_named_in_the_warnings(
 
     out = job_dir / OUTPUT_MP4
     measured = ffmpeg.duration(out)
-    print(f"\n[D-49 capped] s={stretch:.4f} source={video_seconds:.2f}s out={measured:.2f}s {warnings}")
+    print(f"\n[slowdown capped] s={stretch:.4f} source={video_seconds:.2f}s out={measured:.2f}s {warnings}")
     assert measured == pytest.approx(stretch * video_seconds, abs=0.2)
     # Even with burn off, a stretched picture must be re-encoded — a stream copy cannot apply setpts.
     assert stream_of(out, "video")["codec_name"] == "h264"
@@ -649,7 +649,7 @@ def test_speech_that_overruns_even_the_slowest_video_is_named_in_the_warnings(
 def test_speech_that_fits_leaves_the_video_exactly_as_it_was(
     settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The common case pays nothing for D-49: no stretch, no warning, and still a stream copy."""
+    """The common case pays nothing for the slowdown rule: no stretch, no warning, and still a stream copy."""
     backend = RatioBackend(0.9)
     fake_models(monkeypatch, backend)
     video_seconds = ffmpeg.duration(SAMPLE_MP4)
@@ -663,7 +663,7 @@ def test_speech_that_fits_leaves_the_video_exactly_as_it_was(
     assert status["state"] == "done"
     assert status["warnings"] == []
     measured = ffmpeg.duration(job_dir / OUTPUT_MP4)
-    print(f"\n[D-49 fits already] s=1.0 source={video_seconds:.2f}s out={measured:.2f}s")
+    print(f"\n[slowdown fits already] s=1.0 source={video_seconds:.2f}s out={measured:.2f}s")
     assert measured == pytest.approx(video_seconds, abs=0.2)
     assert video_md5(job_dir / OUTPUT_MP4) == video_md5(SAMPLE_MP4), "the picture was touched anyway"
 
@@ -674,7 +674,7 @@ def test_speech_that_fits_leaves_the_video_exactly_as_it_was(
 
 
 class BoomBackend:
-    """A TTS backend that fails the way a missing model would (flow.md B8: never a silent None)."""
+    """A TTS backend that fails the way a missing model would (docs/flow.md B8: never a silent None)."""
 
     name = "boom"
     cloning = False

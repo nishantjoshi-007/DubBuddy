@@ -1,8 +1,8 @@
-# Respeak — plan.md 2.1, decisions D-22 (docker compose up is the headline), D-25 (CUDA is a post-step).
+# Respeak — `docker compose up` is the headline install path; CUDA is a post-step, not an extra.
 #
 # Two stages on the same base: the builder resolves and installs the locked environment, the runtime
 # keeps only /app (the venv and the source) plus ffmpeg and the fonts libass needs. uv is kept in the
-# final image on purpose — YTDLP_AUTO_UPDATE uses it to upgrade yt-dlp at container start (plan.md 2.0).
+# final image on purpose — YTDLP_AUTO_UPDATE uses it to upgrade yt-dlp at container start.
 #
 # Build:   docker build -t respeak:local .
 # CUDA:    docker build --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128 -t respeak:gpu .
@@ -15,7 +15,7 @@ ARG BASE_IMAGE=ghcr.io/astral-sh/uv:python3.14-bookworm-slim
 FROM ${BASE_IMAGE} AS builder
 
 # Where the CUDA post-step gets torch from; the default is the same CPU index the lockfile uses, and
-# then the post-step is skipped entirely (D-25: uv cannot express both in one lockfile).
+# then the post-step is skipped entirely (uv cannot express both in one lockfile).
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
 ENV UV_LINK_MODE=copy \
@@ -41,7 +41,7 @@ COPY respeak ./respeak
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# D-25: CUDA is a post-step, never an extra. Only runs when the caller asked for a different index.
+# CUDA is a post-step, never an extra. Only runs when the caller asked for a different index.
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$TORCH_INDEX" != "https://download.pytorch.org/whl/cpu" ]; then \
         echo "installing torch from $TORCH_INDEX" && \
@@ -69,7 +69,7 @@ ARG PREWARM=0
 ARG UID=1000
 ARG GID=1000
 
-# ffmpeg does every media step (D-05). The Noto fonts are what libass draws burned-in subtitles with:
+# ffmpeg does every media step. The Noto fonts are what libass draws burned-in subtitles with:
 # fonts-noto-core covers Latin/Cyrillic/Greek/Devanagari, fonts-noto-cjk covers Japanese and Chinese —
 # without them those targets burn in as empty boxes. curl is only here for the HEALTHCHECK.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -99,7 +99,7 @@ ENV DATA_DIR=/app/data
 ENV HF_HOME=/app/models/hf \
     XDG_DATA_HOME=/app/models/xdg
 
-# plan.md 2.0: YouTube breaks more often than this image is rebuilt, so ask uv for the newest yt-dlp
+# YouTube breaks more often than this image is rebuilt, so ask uv for the newest yt-dlp
 # at every start. main.py does it in a daemon thread; it never delays the first response.
 ENV YTDLP_AUTO_UPDATE=true
 
@@ -119,7 +119,7 @@ RUN mkdir -p /app/data /app/models/hf /app/models/xdg \
 
 USER respeak
 
-# Optional: download the models at build time instead of on the first job (plan.md 2.3). Runs as the
+# Optional: download the models at build time instead of on the first job. Runs as the
 # non-root user so the caches land with the right ownership, and before VOLUME so they are baked into
 # the image — docker seeds an empty named volume from the image content at that path on first start.
 # PREWARM_LANGUAGES (default en,es) chooses which languages are warmed.
@@ -134,5 +134,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
 
-# One worker: a job is CPU-bound and MAX_CONCURRENT_JOBS inside the process is the real knob (D-11).
+# One worker: a job is CPU-bound and MAX_CONCURRENT_JOBS inside the process is the real knob.
 CMD ["uvicorn", "respeak.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

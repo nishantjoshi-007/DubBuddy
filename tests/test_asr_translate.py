@@ -28,7 +28,7 @@ from respeak.pipeline.types import Segment
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SPEECH_WAV = FIXTURES / "speech_en.wav"
-WHISPER_MODEL = "base"  # cached on the dev machine; `small` is the product default (D-06)
+WHISPER_MODEL = "base"  # cached on the dev machine; `small` is the product default
 
 
 # --------------------------------------------------------------------------------------------------

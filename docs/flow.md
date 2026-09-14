@@ -13,7 +13,7 @@ PART A — OLD SYSTEM   DubBuddy as found on 2026-09-11 (branches `dev` and `doc
 PART B — NEW SYSTEM   Respeak as it is being built on `main`
 ```
 
-Part A is history and evidence. Part B is the contract every task in `plan.md` implements. When Part B and the code disagree, the code is wrong or this file is out of date — fix one of them.
+Part A is history and evidence. Part B is the contract the code implements. When Part B and the code disagree, the code is wrong or this file is out of date — fix one of them.
 
 Read it top to bottom once. After that, use it as a map: find the piece, read only that piece.
 
@@ -263,7 +263,7 @@ same stages, same globals, plus:
 
 Verified: `docker build` failed at `pip install -r requirements.txt` (Coqui TTS backtracked to 0.17.5, pandas 1.4 from source).
 
-The old pipeline files were deleted from `main` in Phase 0. They remain readable with `git show dev:src/<file>.py`.
+The old pipeline files were deleted from `main` at the start of the rebuild. They remain readable with `git show 3651025:src/<file>.py` (the last commit before it).
 
 ---
 ---
@@ -295,7 +295,7 @@ Contrast with A1: state lives on disk per job, outputs are served by a route, an
 ```text
 development     uv sync  →  uv run uvicorn respeak.main:app --reload           (:8000)
 docker          docker compose up                                          (:8000)
-cli (Phase 3)   uv run respeak dub <url-or-file> --to es
+cli             uv run respeak dub <url-or-file> --to es
 ```
 
 `respeak/main.py` builds the app in `create_app()`; the lifespan starts the worker pool and the TTL sweeper and checks that ffmpeg, ffprobe and deno are reachable (`static_ffmpeg.add_paths()` first). Heavy models are loaded lazily by the worker on first use, so the server answers in under a second.
@@ -322,7 +322,7 @@ Nothing in this path can block longer than reading one small file.
 
 # B4. The New Pipeline — Stages, Modules, Interfaces
 
-This is the contract. Module ownership in Phase 1 follows this layout exactly.
+This is the contract. The modules follow this layout exactly.
 
 ```text
 respeak/
@@ -335,7 +335,7 @@ respeak/
   pipeline/
     run.py           run_job(job_id, settings) — orchestrates B4.1…B4.8, updates status, raises → failed
     ffmpeg.py        ensure_binaries(), run(args), probe(path) -> dict, duration(path) -> float
-    inputs.py        probe_youtube(url) -> Probe; fetch_youtube(url, dest, max_height) -> Path
+    inputs.py        probe_url(url) -> Probe; fetch_url(url, dest, max_height) -> Path
                      validate_upload(path, limits) -> Probe; remux(path, dest) -> Path
                      extract_audio(source_mp4, dest_dir) -> (source_wav, reference_wav)
     asr.py           transcribe(wav, language|None, settings) -> Transcript
@@ -368,14 +368,14 @@ BackendInfo name: str, installed: bool, languages: set[str], cloning: bool, reas
 name: str
 languages() -> set[str]                       ISO-639-1 codes the backend can speak
 synthesize(text, lang, reference_wav: Path|None, out: Path, voice: str|None = None) -> Path   writes 24 kHz mono wav
-voices() -> dict[str, list[Voice]]       Voice(id, name) per language; empty for backends that clone (Phase 3.3)
+voices() -> dict[str, list[Voice]]       Voice(id, name) per language; empty for backends that clone
 ```
 
 ### B4.1 probe
-YouTube: the host must resolve to a public address (loopback, private, link-local and reserved ranges are refused both in the API and here, because yt-dlp's generic extractor would otherwise fetch any URL the server can reach), then one `yt_dlp.extract_info(download=False)` → title, duration, id. Upload: `ffprobe`. Reject `duration > MAX_VIDEO_SECONDS`, missing video stream, or unsupported language before anything else. Writes `status.title`.
+Link (any site yt-dlp supports, not only YouTube): the host must resolve to a public address (loopback, private, link-local and reserved ranges are refused both in the API and here, because yt-dlp's generic extractor would otherwise fetch any URL the server can reach), then one `yt_dlp.extract_info(download=False)` → title, duration, id; playlists, live streams and audio-only links are refused. Upload: `ffprobe`. Reject `duration > MAX_VIDEO_SECONDS`, missing video stream, or unsupported language before anything else. Writes `status.title`.
 
 ### B4.2 fetch
-YouTube: `bestvideo[height<=MAX_HEIGHT][ext=mp4]+bestaudio[ext=m4a]/best[height<=MAX_HEIGHT]` merged → `source.mp4`; `deno` on PATH; `YTDLP_COOKIES_FILE` when set. Upload: `upload.bin` → re-muxed `source.mp4`. The result is checked with ffprobe and re-encoded to h264 + aac if a WebM/VP9/Opus stream was copied through (so `-c:v copy` in the mux can never leak non-MP4 codecs into `out.mp4`). Then `ffmpeg` → `source.wav` (16 kHz mono) and `reference.wav` (loudest ≤ 30 s window, 24 kHz).
+Link: `bestvideo[height<=MAX_HEIGHT][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=MAX_HEIGHT]+bestaudio/best[height<=MAX_HEIGHT]/best` merged → `source.mp4` (plain `best` last, for sites that report no height); a download with no video stream is refused; `deno` on PATH; `YTDLP_COOKIES_FILE` when set. Upload: `upload.bin` → re-muxed `source.mp4`. The result is checked with ffprobe and re-encoded to h264 + aac if a WebM/VP9/Opus stream was copied through (so `-c:v copy` in the mux can never leak non-MP4 codecs into `out.mp4`). Then `ffmpeg` → `source.wav` (16 kHz mono) and `reference.wav` (loudest ≤ 30 s window, 24 kHz).
 
 ### B4.3 transcribe
 faster-whisper `WhisperModel(WHISPER_MODEL, device, compute_type)`; `language = from_lang or None`; `beam_size=5`, `word_timestamps=True`, `vad_filter=True`. Returns `Transcript`. Writes `status.detected_language`.
@@ -386,12 +386,12 @@ Argos. If `src != en` install `src→en`; if `dst != en` install `en→dst`; obt
 ### B4.5 speak
 `backend.synthesize(text_i, dst, reference_wav if backend.cloning else None, seg_i.wav, voice=options.voice)` per segment; `detail = "segment i of n"`.
 
-Reference clip (Phase 3.7): chosen after transcription — the ≤ 30 s window containing the most speech by ASR segments, cut from `source.wav` at 24 kHz; falls back to the first 30 s when there is no speech.
+Reference clip: chosen after transcription — the ≤ 30 s window containing the most speech by ASR segments, cut from `source.wav` at 24 kHz; falls back to the first 30 s when there is no speech.
 
 ### B4.6 fit
 Per segment: slot = `seg.end - seg.start`; ratio = clip_seconds / slot; factor = min(ratio, MAX_SPEECH_SPEEDUP) when ratio > 1, otherwise 1.0 — a clip that already fits is never slowed down; `atempo` (chained when outside 0.5–2.0) → fitted clip.
 
-Then the timeline (D-49, never cut speech):
+Then the timeline (never cut speech; see docs/decisions.md):
 ```text
 s = max(1, max_i  Σ_{j≥i} d_j / (V − start_i))     d_j fitted clip lengths, V video length, i over sentences
         ↓
@@ -433,14 +433,14 @@ DATA_DIR/jobs/<id>/status.json
   "progress": 0.0–1.0, "error": null | "step: message",
   "created_at": iso, "updated_at": iso,
   "title": str|null, "detected_language": str|null,
-  "source": {"type": "youtube|upload", "url": str|null, "filename": str|null},
+  "source": {"type": "url|upload", "url": str|null, "filename": str|null},
   "options": {"to_lang": "es", "from_lang": null, "backend": "kokoro", "burn_subtitles": true},
   "output": null | "out.mp4", "download_url": null | "/api/jobs/<id>/download",
   "warnings": [],         human sentences, e.g. speech that did not fit before the video ended (shown, not fatal)
-  "detail": null | "downloading 3.1 MB of 7.4 MB" | "segment 4 of 12"   short text for the current step (Phase 3.1)
+  "detail": null | "downloading 3.1 MB of 7.4 MB" | "segment 4 of 12"   short text for the current step
 }
 
-`options` also carries `"voice": null | "<voice id>"` (Phase 3.3).
+`options` also carries `"voice": null | "<voice id>"`.
 ```
 
 Writes are atomic (write temp, `os.replace`). Reads never lock. Any web process can answer for any job. `MAX_CONCURRENT_JOBS` bounds CPU use; extra jobs wait in the pool queue in `queued`.
@@ -467,15 +467,15 @@ index.html  (served for / and /jobs/<id>; <body data-job-id="…">)
   app.css   system font stack, prefers-color-scheme defaults, toggle overrides
 ```
 
-Form fields: source tabs (YouTube URL / upload, upload tab hidden when `ALLOW_UPLOADS=false`), target language, backend (conditional), voice (conditional: shown when the backend lists voices for the chosen language, Phase 3.3), "Burn subtitles into the video" (default on), Advanced fold → source language override, one-line rights notice. The job view shows `step`, `progress`, `detail`, `warnings`, `error`.
+Form fields: source tabs (video link / upload, upload tab hidden when `ALLOW_UPLOADS=false`), target language, backend (conditional), voice (conditional: shown when the backend lists voices for the chosen language), "Burn subtitles into the video" (default on), Advanced fold → source language override, one-line rights notice. The job view shows `step`, `progress`, `detail`, `warnings`, `error`.
 
-`GET /api/backends` (Phase 3.3): each backend also carries `voices: {lang: [{id, name}]}`; Chatterbox's is empty because it clones.
+`GET /api/backends`: each backend also carries `voices: {lang: [{id, name}]}`; Chatterbox's is empty because it clones.
 
-`GET /api/voices/{backend}/{lang}/{voice}` (D-47): a short sample sentence in that voice, `audio/wav`, generated by the backend on first request into `DATA_DIR/voice_samples/…` and served from there afterwards; 400 for an id not in the backend's table, 404 for a backend without presets. The picker's play button calls it.
+`GET /api/voices/{backend}/{lang}/{voice}`: a short sample sentence in that voice, `audio/wav`, generated by the backend on first request into `DATA_DIR/voice_samples/…` and served from there afterwards; 400 for an id not in the backend's table, 404 for a backend without presets. The picker's play button calls it.
 
-Theme (D-48): `<html>` gets the stored theme before first paint; with nothing stored the page follows `prefers-color-scheme` and reacts to OS flips; the toggle writes `localStorage.theme` and wins from then on.
+Theme: `<html>` gets the stored theme before first paint; with nothing stored the page follows `prefers-color-scheme` and reacts to OS flips; the toggle writes `localStorage.theme` and wins from then on.
 
-Rate limit (Phase 3.5): `RATE_LIMIT_JOBS="10/hour"` (off by default) — token bucket per client IP, applied in the middleware before the body is parsed (after the Content-Length check, so an oversize upload costs no token); 429 `{"error": …}` with `Retry-After`. With `TRUST_PROXY=true` the client is the **last** `X-Forwarded-For` entry (the one the trusted proxy appended; the leftmost is client-supplied), parsed as an IP or ignored; the bucket table is capped and evicts the oldest addresses. `respeak serve` passes the matching `forwarded_allow_ips` to uvicorn.
+Rate limit: `RATE_LIMIT_JOBS="10/hour"` (off by default) — token bucket per client IP, applied in the middleware before the body is parsed (after the Content-Length check, so an oversize upload costs no token); 429 `{"error": …}` with `Retry-After`. With `TRUST_PROXY=true` the client is the **last** `X-Forwarded-For` entry (the one the trusted proxy appended; the leftmost is client-supplied), parsed as an IP or ignored; the bucket table is capped and evicts the oldest addresses. `respeak serve` passes the matching `forwarded_allow_ips` to uvicorn.
 
 ```text
 why the last entry:   client sends  X-Forwarded-For: 1.1.1.1
@@ -483,7 +483,7 @@ why the last entry:   client sends  X-Forwarded-For: 1.1.1.1
                       trusting the first entry would give every request a fresh bucket
 ```
 
-CLI (Phase 3.2): `respeak dub <url-or-file> --to LANG [--from LANG] [--backend …] [--voice ID] [--no-burn] [--out PATH] [--data-dir DIR]`, `respeak serve`, `respeak prewarm`; same `run_job`, progress on stderr, exit 0/1.
+CLI: `respeak dub <url-or-file> --to LANG [--from LANG] [--backend …] [--voice ID] [--no-burn] [--out PATH] [--data-dir DIR]`, `respeak serve`, `respeak prewarm`; same `run_job`, progress on stderr, exit 0/1.
 
 ---
 

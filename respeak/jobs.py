@@ -1,4 +1,4 @@
-"""Job state on disk, the worker pool and the TTL sweeper (flow.md B5, B7).
+"""Job state on disk, the worker pool and the TTL sweeper (docs/flow.md B5, B7).
 
 One directory per job under ``DATA_DIR/jobs/<id>/``; ``status.json`` is the only source of truth, so
 any web process (``--workers 2``) can answer for any job. Writes are atomic (temp file + ``os.replace``),
@@ -36,9 +36,9 @@ OUTPUT_FILENAME = "out.mp4"
 JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 SWEEP_INTERVAL_SECONDS = 300.0
-#: Never delete a job directory younger than this, whatever its state (flow.md B5).
+#: Never delete a job directory younger than this, whatever its state (docs/flow.md B5).
 MIN_AGE_MINUTES = 5
-#: A `queued`/`running` job older than this belongs to a server that died mid-job (flow.md B5).
+#: A `queued`/`running` job older than this belongs to a server that died mid-job (docs/flow.md B5).
 STALE_RUNNING_HOURS = 6
 
 #: ``run_fn(job_id, settings, store)`` — the injected pipeline entry point (``pipeline/run.py``).
@@ -74,7 +74,7 @@ def _check_job_id(job_id: str) -> str:
 
 
 class JobStore:
-    """Reads and writes ``DATA_DIR/jobs/<id>/status.json`` (schema: flow.md B5)."""
+    """Reads and writes ``DATA_DIR/jobs/<id>/status.json`` (schema: docs/flow.md B5)."""
 
     def __init__(self, jobs_dir: Path) -> None:
         self.jobs_dir = Path(jobs_dir)
@@ -108,8 +108,8 @@ class JobStore:
     ) -> str:
         """Create ``<jobs_dir>/<uuid4 hex>/status.json`` in state ``queued`` and return the id."""
         source_type = source.get("type")
-        if source_type not in {"youtube", "upload"}:
-            raise ValueError(f"source type must be 'youtube' or 'upload', got {source_type!r}")
+        if source_type not in {"url", "upload"}:
+            raise ValueError(f"source type must be 'url' or 'upload', got {source_type!r}")
         if not options.get("to_lang"):
             raise ValueError("options must contain a non-empty 'to_lang'")
 
@@ -211,7 +211,7 @@ class JobStore:
         return self.update(job_id, **fields)
 
     def fail(self, job_id: str, error: str) -> dict[str, Any]:
-        """Move the job to ``failed`` with a visible message (flow.md B8: never a silent None).
+        """Move the job to ``failed`` with a visible message (docs/flow.md B8: never a silent None).
 
         ``detail`` is cleared with it: it is the sentence for work that is *happening now*, and a
         failed job leaving "speaking segment 4 of 12" on the page next to the error reads as if the
@@ -257,7 +257,7 @@ def placeholder_run(job_id: str, settings: Settings, store: JobStore) -> None:
 
 
 class JobRunner:
-    """A bounded thread pool that runs one synchronous pipeline call per job (flow.md B1, B3)."""
+    """A bounded thread pool that runs one synchronous pipeline call per job (docs/flow.md B1, B3)."""
 
     def __init__(self, store: JobStore, settings: Settings, run_fn: RunFn | None = None) -> None:
         self.store = store
@@ -313,7 +313,7 @@ def sweep(
     now: datetime | None = None,
     active: Collection[str] = frozenset(),
 ) -> list[str]:
-    """Delete expired job directories and return the ids removed (flow.md B5).
+    """Delete expired job directories and return the ids removed (docs/flow.md B5).
 
     * ``done`` / ``failed`` older than ``ttl_minutes``
     * ``queued`` / ``running`` older than 6 h (a server that died mid-job)

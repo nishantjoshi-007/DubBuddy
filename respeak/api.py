@@ -1,4 +1,4 @@
-"""JSON API (flow.md B3, B5).
+"""JSON API (docs/flow.md B3, B5).
 
 Every route here is cheap: the job routes read or write one small file and return. The work happens in
 :class:`respeak.jobs.JobRunner`'s thread pool, never on the event loop.
@@ -73,7 +73,7 @@ def _norm_lang(raw: str | None) -> str:
 
 
 def safe_name(raw: str | None, fallback: str = "") -> str:
-    """A filename-safe version of a client filename or a video title (decisions.md D-26).
+    """A filename-safe version of a client filename or a video title.
 
     Separators and punctuation become ``_``; leading dots and underscores go, so the result can never
     be ``.``, ``..`` or a path. Titles keep their letters, including non-Latin ones.
@@ -107,7 +107,7 @@ def parse_rate_limit(raw: str | None) -> RateLimit | None:
     """``"10/hour"`` → ``RateLimit(10, 3600.0)``; empty → ``None`` (the limit is off).
 
     Also accepts a multiple (``"5/2 hours"``) and a plural unit. Raises ``ValueError`` on anything
-    else: a typo must not quietly leave a public deployment unlimited (plan.md 3.5).
+    else: a typo must not quietly leave a public deployment unlimited.
     """
     text = (raw or "").strip()
     if not text:
@@ -125,7 +125,7 @@ def parse_rate_limit(raw: str | None) -> RateLimit | None:
 
 
 class RateLimiter:
-    """One in-memory token bucket per client address (flow.md B6, plan.md 3.5).
+    """One in-memory token bucket per client address (docs/flow.md B6).
 
     A bucket starts full, so the first ``count`` submissions from a fresh address always go through;
     it refills continuously at ``count / seconds`` per second, which is what makes the limit reset by
@@ -227,7 +227,7 @@ def parse_ip(raw: str | None) -> str | None:
 
 
 def client_address(request: Request, trust_proxy: bool) -> str:
-    """The address the limit is counted against (flow.md B6).
+    """The address the limit is counted against (docs/flow.md B6).
 
     ``X-Forwarded-For`` is a client-supplied header: honouring it without a proxy in front would let
     anyone reset their own bucket by inventing an address, so it is read only with ``TRUST_PROXY``.
@@ -287,7 +287,7 @@ def health() -> dict[str, Any]:
         "binaries": {name: shutil.which(name) is not None for name in ("ffmpeg", "ffprobe", "deno")},
         # dist-info reads only (respeak.selfupdate) — importing torch here would cost a second and
         # half a gigabyte on a route that is polled. With YTDLP_AUTO_UPDATE on, this is where an
-        # operator checks that the container really did pick up a newer yt-dlp (plan.md 2.0).
+        # operator checks that the container really did pick up a newer yt-dlp.
         "versions": component_versions(),
     }
 
@@ -305,7 +305,7 @@ def backends() -> dict[str, Any]:
                 "languages": sorted(info.languages),
                 "cloning": info.cloning,
                 "reason": info.reason,
-                # {lang: [{id, name}]} — the Phase 3 voice picker. Empty for a cloning backend, so
+                # {lang: [{id, name}]} — the voice picker. Empty for a cloning backend, so
                 # the form can simply hide the select when the chosen language has no entry.
                 "voices": {
                     lang: [{"id": voice.id, "name": voice.name} for voice in entries]
@@ -326,7 +326,7 @@ SAMPLE_CACHE_CONTROL = "public, max-age=86400"
 
 @router.get("/api/voices/{backend}/{lang}/{voice}")
 def voice_sample(backend: str, lang: str, voice: str) -> Any:
-    """A short WAV of one voice saying one sentence, so the picker can be listened to (plan.md 3.3).
+    """A short WAV of one voice saying one sentence, so the picker can be listened to.
 
     A plain ``def``: the first request for a voice may load a model and synthesise for a second or
     two, and that belongs in the threadpool, never on the event loop. Afterwards it is a cached file.
@@ -354,7 +354,7 @@ def voice_sample(backend: str, lang: str, voice: str) -> Any:
 
 
 def check_voice(info: BackendInfo, target: str, voice: str | None) -> str | None:
-    """The voice id to store, or ``None`` for the backend's own default (plan.md 3.3).
+    """The voice id to store, or ``None`` for the backend's own default.
 
     Raises :class:`Rejected` naming the ids that *are* available, because an unknown id in a form
     is almost always a stale page or a typed CLI flag.
@@ -374,15 +374,16 @@ def check_voice(info: BackendInfo, target: str, voice: str | None) -> str | None
 
 
 def check_source_url(url: str | None) -> str:
-    """The URL a YouTube job may be created from, or :class:`Rejected` (flow.md B4.1, F9).
+    """The URL a link job may be created from, or :class:`Rejected` (docs/flow.md B4.1).
 
-    The host must resolve to a public address: yt-dlp's generic extractor would otherwise happily
-    fetch ``http://169.254.169.254/…`` — anything this machine can reach — on a caller's behalf.
-    The pipeline checks again in ``inputs.probe_youtube``; this one keeps the job from existing.
+    Any site yt-dlp supports is fine; the one rule is that the host must resolve to a public
+    address, because yt-dlp's generic extractor would otherwise happily fetch
+    ``http://169.254.169.254/…`` — anything this machine can reach — on a caller's behalf.
+    The pipeline checks again in ``inputs.probe_url``; this one keeps the job from existing.
     """
     link = (url or "").strip()
     if not link:
-        raise Rejected(400, "a YouTube URL is required")
+        raise Rejected(400, "a video URL is required")
     parsed = urlparse(link)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise Rejected(400, "the URL must start with http:// or https://")
@@ -401,7 +402,7 @@ def check_options(
     voice: str | None = None,
 ) -> dict[str, Any]:
     """Backend, target language, source-language override and voice — the part of the job options
-    the form and the CLI check identically (flow.md B3, plan.md 3.2/3.3).
+    the form and the CLI check identically (docs/flow.md B3).
 
     Returns the ``options`` fragment for :meth:`respeak.jobs.JobStore.create`; raises
     :class:`Rejected` with a message meant to be shown to a person, whichever front end asked.
@@ -449,8 +450,8 @@ def _validate(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Check the form before anything is created or downloaded. Returns ``(source, options)``."""
     kind = (source_type or "").strip().lower()
-    if kind not in {"youtube", "upload"}:
-        raise Rejected(400, "source_type must be 'youtube' or 'upload'")
+    if kind not in {"url", "upload"}:
+        raise Rejected(400, "source_type must be 'url' or 'upload'")
 
     options = check_options(settings, to_lang, from_lang, backend, voice)
 
@@ -464,7 +465,7 @@ def _validate(
 
     link: str | None = None
     filename: str | None = None
-    if kind == "youtube":
+    if kind == "url":
         link = check_source_url(url)
     else:
         if not settings.allow_uploads:
@@ -478,7 +479,7 @@ def _validate(
 
 
 def _save_upload(file: UploadFile, dest: Path, max_upload_mb: int) -> int:
-    """Copy the upload to ``dest`` in chunks, enforcing MAX_UPLOAD_MB (decisions.md D-26).
+    """Copy the upload to ``dest`` in chunks, enforcing MAX_UPLOAD_MB.
 
     Synchronous on purpose: the route is a plain ``def``, so this runs in FastAPI's threadpool and
     half a gigabyte of disk writes never sits on the event loop.
@@ -550,7 +551,7 @@ def create_job(
     burn_subtitles: Annotated[str | None, Form()] = None,
     file: Annotated[UploadFile | None, File()] = None,
 ) -> JSONResponse:
-    """Validate, create the job directory, hand it to the pool, answer immediately (flow.md B3)."""
+    """Validate, create the job directory, hand it to the pool, answer immediately (docs/flow.md B3)."""
     settings = get_settings()
     # The rate limit was already applied in limit_upload_size(), before the body was parsed.
     try:
@@ -593,7 +594,7 @@ def _load(store: JobStore, job_id: str) -> dict[str, Any]:
 
 @router.get("/api/jobs/{job_id}")
 def job_status(job_id: str) -> JSONResponse:
-    """The status dict exactly as it is on disk (flow.md B5)."""
+    """The status dict exactly as it is on disk (docs/flow.md B5)."""
     store = get_store(get_settings())
     try:
         return JSONResponse(content=_load(store, job_id))

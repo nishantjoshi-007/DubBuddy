@@ -1,4 +1,4 @@
-"""The TTS backend contract (flow.md B4).
+"""The TTS backend contract (docs/flow.md B4).
 
 One protocol, two implementations: kokoro.py and chatterbox.py.
 """

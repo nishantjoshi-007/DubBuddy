@@ -1,9 +1,9 @@
-"""Kokoro-82M, the default TTS backend (flow.md B4.5, decisions D-07 / D-37).
+"""Kokoro-82M, the default TTS backend (docs/flow.md B4.5).
 
 Apache-2.0, 82M parameters, roughly real time on this CPU, eight languages, no voice cloning.
 One `KPipeline` per kokoro lang_code is built on first use and kept for the life of the process.
-Every voice the repo bundles is offered (plan.md 3.3); `VOICES` still names the one that is used
-when a job does not pick one (D-37).
+Every voice the repo bundles is offered ; `VOICES` still names the one that is used
+when a job does not pick one.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class KokoroBackend:
         return set(VOICES)
 
     def voices(self) -> dict[str, list[Voice]]:
-        """Every bundled voice per language, the curated default first (plan.md 3.3).
+        """Every bundled voice per language, the curated default first.
 
         A fresh list of the shared `Voice` objects: a caller that sorts or filters its answer must
         not be able to reorder the table every later caller reads.
@@ -136,7 +136,7 @@ class KokoroBackend:
         return "not installed: the `kokoro` package is missing; run `uv sync`"
 
     def voice_for(self, lang: str) -> str:
-        """The curated voice used for `lang` when a job picks none (D-37)."""
+        """The curated voice used for `lang` when a job picks none."""
         return self.resolve_voice(lang)[1]
 
     def resolve_voice(self, lang: str, voice: str | None = None) -> tuple[str, str]:

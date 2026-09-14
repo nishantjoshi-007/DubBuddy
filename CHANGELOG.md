@@ -45,6 +45,9 @@ v2.0.0 because this replaces the old app rather than continuing it.
 
 - One page: paste a link or upload a file, choose a target language, and the result appears where
   the form was. Reloading a job URL brings it back.
+- A link can point at any site yt-dlp supports, not only YouTube: TikTok, Reddit, Dailymotion,
+  Bilibili and most of the rest. Audio-only links and playlists are refused before anything is
+  downloaded.
 - Progress moves per stage with a detail line under it — bytes downloaded, seconds transcribed,
   sentence n of m, encoder position. Failures appear on the page, in words.
 - A voice picker with a play button beside it; previews are synthesised on first request and cached.
@@ -60,8 +63,8 @@ v2.0.0 because this replaces the old app rather than continuing it.
 - A sweeper deletes job directories older than `JOB_TTL_MINUTES` (60) and never touches a running one.
 - An optional per-IP rate limit (`RATE_LIMIT_JOBS`, off by default), with `TRUST_PROXY` deciding
   whether a forwarded address is believed.
-- yt-dlp upgrades itself at startup when asked to, because YouTube breaks more often than I rebuild
-  an image.
+- yt-dlp upgrades itself at startup when asked to, because video sites break more often than I
+  rebuild an image.
 - A `Dockerfile` and a `docker-compose.yml` with a CPU service and a GPU profile, volumes for the
   data and the model caches, and a prewarm step that bakes the weights into the image.
 - Caps on everything, all settable in `.env`: 15 minutes of video, 500 MB of upload, 720p.
@@ -74,7 +77,8 @@ v2.0.0 because this replaces the old app rather than continuing it.
   marked slow or skips itself with a reason.
 - A `respeak` command line with `dub`, `serve` and `prewarm`, driving the same pipeline the page does.
 - Continuous integration: the three Python versions, ruff, the test suite, and a Docker build.
-- `decisions.md` and `flow.md` record every choice, what was rejected, and the mechanism it protects.
+- `docs/decisions.md` and `docs/flow.md` record the choices, what was rejected, and the mechanism
+  each one protects.
 
 ### Known limits
 

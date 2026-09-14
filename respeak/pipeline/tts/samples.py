@@ -1,4 +1,4 @@
-"""Voice previews for the picker (plan.md 3.3, flow.md B6).
+"""Voice previews for the picker.
 
 "Dora (female)" and "Alex (male)" tell a person almost nothing about what they are about to hear, so
 the form offers a play button next to the voice select and this module answers it: one short neutral

@@ -1,8 +1,10 @@
-"""Input stage: YouTube and upload both end as `source.mp4` + `source.wav` + `reference.wav`.
+"""Input stage: a video link and an upload both end as `source.mp4` + `source.wav` + `reference.wav`.
 
-flow.md B4.1 / B4.2, plan.md 1.3, decisions.md D-11 (limits), D-23/D-26 (uploads).
+docs/flow.md B4.1 / B4.2. A link is anything yt-dlp can fetch, not only YouTube: the host has to
+resolve to a public address, the metadata has to carry a duration, and the download has to hold a
+video stream.
 
-One `extract_info` call answers the probe question for YouTube (never the three round-trips of the old
+One `extract_info` call answers the probe question for a link (never the three round-trips of the old
 system), and every failure raises `InputError` with a message a user can act on.
 """
 
@@ -26,17 +28,17 @@ from respeak.pipeline.types import Probe, Segment
 log = logging.getLogger(__name__)
 
 REFERENCE_SECONDS = 30.0
-"""Longest speaker reference clip handed to a cloning TTS backend (flow.md B4.2)."""
+"""Longest speaker reference clip handed to a cloning TTS backend (docs/flow.md B4.2)."""
 
 SOURCE_SAMPLE_RATE = 16_000
-"""What faster-whisper wants (flow.md B4.2)."""
+"""What faster-whisper wants (docs/flow.md B4.2)."""
 
 REFERENCE_SAMPLE_RATE = 24_000
-"""What the TTS backends speak at (flow.md B4 `TTSBackend`)."""
+"""What the TTS backends speak at (docs/flow.md B4 `TTSBackend`)."""
 
 MP4_VIDEO_CODECS: frozenset[str] = frozenset({"h264", "hevc"})
 MP4_AUDIO_CODECS: frozenset[str] = frozenset({"aac", "mp3"})
-"""What an `.mp4` may hold and still play in a browser `<video>` (flow.md B4.8)."""
+"""What an `.mp4` may hold and still play in a browser `<video>` (docs/flow.md B4.8)."""
 
 DownloadProgress = Callable[[float, str], None]
 """Called with (0–1 of the bytes fetched, a sentence like "downloading 3.1 MB of 7.4 MB")."""
@@ -125,7 +127,7 @@ def _is_public(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 
 def enforce_duration(probe: Probe, settings: Settings) -> None:
-    """Raise `InputError` when the source is longer than `MAX_VIDEO_SECONDS` (D-11)."""
+    """Raise `InputError` when the source is longer than `MAX_VIDEO_SECONDS`."""
     limit = float(settings.max_video_seconds)
     if probe.duration > limit:
         raise InputError(
@@ -135,12 +137,15 @@ def enforce_duration(probe: Probe, settings: Settings) -> None:
 
 
 # --------------------------------------------------------------------------------------------------
-# YouTube
+# Links (yt-dlp)
 # --------------------------------------------------------------------------------------------------
 
 
-def probe_youtube(url: str, settings: Settings) -> Probe:
-    """One `extract_info(download=False)` → title, duration, frame size. Playlists are rejected."""
+def probe_url(url: str, settings: Settings) -> Probe:
+    """One `extract_info(download=False)` → title, duration, frame size.
+
+    Playlists, live streams and audio-only links are rejected here, before anything is downloaded.
+    """
     check_public_url(url)  # api._validate checks this too; the pipeline never trusts its caller
     ffmpeg.ensure_binaries()  # yt-dlp needs deno as its JS runtime
     import yt_dlp
@@ -158,9 +163,11 @@ def probe_youtube(url: str, settings: Settings) -> Probe:
     except Exception as exc:  # yt-dlp raises DownloadError and friends
         raise InputError(_readable_ytdlp_error(url, exc)) from exc
     if not isinstance(info, dict):
-        raise InputError(f"YouTube returned nothing usable for {url}.")
+        raise InputError(f"The site returned nothing usable for {url}.")
     if info.get("_type") == "playlist" or info.get("entries") is not None:
         raise InputError("That link is a playlist or channel. Paste the URL of a single video.")
+    if _audio_only(info):
+        raise InputError("That link is audio only (a track or a podcast). Respeak needs a video.")
     duration = info.get("duration")
     if duration is None:
         raise InputError(
@@ -169,7 +176,7 @@ def probe_youtube(url: str, settings: Settings) -> Probe:
     try:
         seconds = float(duration)
     except (TypeError, ValueError) as exc:
-        raise InputError(f"YouTube reported an unreadable duration ({duration!r}).") from exc
+        raise InputError(f"The site reported an unreadable duration ({duration!r}).") from exc
     title = info.get("title")
     return Probe(
         duration=seconds,
@@ -180,15 +187,27 @@ def probe_youtube(url: str, settings: Settings) -> Probe:
     )
 
 
-def fetch_youtube(
+def _audio_only(info: dict[str, Any]) -> bool:
+    """True when yt-dlp lists formats and every one of them is audio-only (`vcodec == "none"`).
+
+    A missing `vcodec` means "unknown", which is no reason to refuse; the stream check after the
+    download catches whatever slips through here.
+    """
+    formats = [f for f in (info.get("formats") or []) if isinstance(f, dict)]
+    if not formats:
+        return str(info.get("vcodec") or "").lower() == "none"
+    return all(str(f.get("vcodec") or "").lower() == "none" for f in formats)
+
+
+def fetch_url(
     url: str,
     dest_dir: Path,
     settings: Settings,
     progress: DownloadProgress | None = None,
 ) -> Path:
-    """Download at most `MAX_HEIGHT` and return `dest_dir/source.mp4` (D-11, flow.md B4.2).
+    """Download at most `MAX_HEIGHT` and return `dest_dir/source.mp4` (docs/flow.md B4.2).
 
-    `progress`, when given, is called from yt-dlp's `progress_hooks` as the bytes arrive (plan.md 3.1).
+    `progress`, when given, is called from yt-dlp's `progress_hooks` as the bytes arrive.
     """
     ffmpeg.ensure_binaries()
     import yt_dlp
@@ -197,10 +216,13 @@ def fetch_youtube(
     dest_dir.mkdir(parents=True, exist_ok=True)
     target = dest_dir / "source.mp4"
     height = int(settings.max_height)
+    # `best` last: a site that reports no height matches none of the capped selectors, and a download
+    # that fails over a missing number is worse than one at the site's own resolution.
     fmt = (
         f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/"
         f"bestvideo[height<={height}]+bestaudio/"
-        f"best[height<={height}]"
+        f"best[height<={height}]/"
+        "best"
     )
     opts: dict[str, Any] = {
         "quiet": True,
@@ -222,17 +244,27 @@ def fetch_youtube(
     except Exception as exc:
         raise InputError(_readable_ytdlp_error(url, exc)) from exc
     if target.exists() and target.stat().st_size > 0:
-        # The `bestvideo+bestaudio` fallback merges whatever YouTube served — often VP9 + Opus —
+        _require_video_stream(target, url)
+        # The `bestvideo+bestaudio` fallback merges whatever the site served — often VP9 + Opus —
         # into the .mp4 container, and that plays in almost no <video> element.
         return ensure_mp4_codecs(target)
     produced = sorted(p for p in dest_dir.glob("source.*") if p.is_file() and p.stat().st_size > 0)
     if not produced:
         raise InputError(f"yt-dlp finished but wrote no file for {url}.")
     other = produced[0]
+    _require_video_stream(other, url)
     log.info("yt-dlp produced %s; re-muxing to source.mp4", other.name)
     remux(other, target)
     other.unlink(missing_ok=True)
     return target
+
+
+def _require_video_stream(path: Path, url: str) -> None:
+    """Refuse a download with no video in it: `best` on an audio-only page is a bare audio file."""
+    if ffmpeg.video_streams(ffmpeg.probe(path)):
+        return
+    path.unlink(missing_ok=True)
+    raise InputError(f"{url} gave audio only (a track or a podcast). Respeak needs a video.")
 
 
 def _download_hook(progress: DownloadProgress) -> Callable[[dict[str, Any]], None]:
@@ -289,7 +321,7 @@ def _readable_ytdlp_error(url: str, exc: Exception) -> str:
     low = text.lower()
     if "not a bot" in low or "sign in to confirm" in low:
         return (
-            "YouTube asked this machine to prove it is not a bot. Set YTDLP_COOKIES_FILE to a cookies "
+            "The site asked this machine to prove it is not a bot. Set YTDLP_COOKIES_FILE to a cookies "
             f"export from a signed-in browser, or upload the file instead. ({text})"
         )
     if "private video" in low:
@@ -302,7 +334,7 @@ def _readable_ytdlp_error(url: str, exc: Exception) -> str:
         return f"That video is unavailable. ({text})"
     if "is not a valid url" in low or "unsupported url" in low:
         return f"{url} is not a URL yt-dlp can handle. ({text})"
-    return f"YouTube download failed for {url}: {text}"
+    return f"Download failed for {url}: {text}"
 
 
 # --------------------------------------------------------------------------------------------------
@@ -311,7 +343,7 @@ def _readable_ytdlp_error(url: str, exc: Exception) -> str:
 
 
 def validate_upload(path: Path | str, settings: Settings) -> Probe:
-    """ffprobe must succeed on the upload, show exactly one video stream, and fit the limits (D-26)."""
+    """ffprobe must succeed on the upload, show exactly one video stream, and fit the limits."""
     src = Path(path)
     if not src.exists() or src.stat().st_size == 0:
         raise InputError(f"The uploaded file is missing or empty ({src.name}).")
@@ -340,7 +372,7 @@ def validate_upload(path: Path | str, settings: Settings) -> Probe:
 
 
 def remux(src: Path | str, dest: Path | str) -> Path:
-    """Stream-copy into a faststart MP4; re-encode only when the copy is refused (D-26)."""
+    """Stream-copy into a faststart MP4; re-encode only when the copy is refused."""
     source = Path(src)
     target = Path(dest)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -379,7 +411,7 @@ def remux(src: Path | str, dest: Path | str) -> Path:
 def ensure_mp4_codecs(path: Path | str) -> Path:
     """Return a file with MP4-native codecs, re-encoding `path` to h264 + aac when it is not one.
 
-    The dub is muxed back into the source container later (flow.md B4.8), and with `burn=False` the
+    The dub is muxed back into the source container later (docs/flow.md B4.8), and with `burn=False` the
     video stream is copied, so a VP9/Opus source would come out the other end as an `out.mp4` that
     Safari and most phones refuse to play. The re-encode is written to a sibling file; when the
     input is already an `.mp4` it takes its place, so `source.mp4` stays `source.mp4`.
@@ -511,7 +543,7 @@ def reference_from_segments(
     out: Path | str,
     max_seconds: float = REFERENCE_SECONDS,
 ) -> Path:
-    """Cut the ≤ `max_seconds` window of `source_wav` that holds the most speech (plan.md 3.7, B4.5).
+    """Cut the ≤ `max_seconds` window of `source_wav` that holds the most speech.
 
     Chosen from the ASR segments rather than from loudness: 20 s of music in front of the first
     sentence wins the RMS contest and hands a cloning backend a reference with no voice in it. Falls

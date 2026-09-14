@@ -1,7 +1,7 @@
-"""TTS backend registry (flow.md B4.5).
+"""TTS backend registry (docs/flow.md B4.5).
 
-`available_backends()` answers `GET /api/backends` (D-24); `get_backend()` hands the speak stage a
-ready backend chosen by `TTS_BACKEND` or the per-job override (D-27). The backend modules are
+`available_backends()` answers `GET /api/backends`; `get_backend()` hands the speak stage a
+ready backend chosen by `TTS_BACKEND` or the per-job override. The backend modules are
 imported lazily, so importing this package stays cheap for the web process — nothing here pulls
 torch or a model into memory.
 
@@ -91,7 +91,7 @@ def _construct(name: str, settings: Settings) -> KokoroBackend | ChatterboxBacke
 
 
 def _voices_of(backend: TTSBackend) -> dict[str, list[Voice]]:
-    """`backend.voices()`, or `{}` when that backend cannot answer (plan.md 3.3).
+    """`backend.voices()`, or `{}` when that backend cannot answer.
 
     `available_backends()` is behind a route the page loads on every visit, and a backend that
     offers no voices is an ordinary state (Chatterbox clones instead). One backend whose voice
@@ -106,11 +106,11 @@ def _voices_of(backend: TTSBackend) -> dict[str, list[Voice]]:
 
 
 def available_backends(settings: Settings) -> dict[str, BackendInfo]:
-    """Describe every backend Respeak knows about, installed or not (flow.md B4.5, D-24).
+    """Describe every backend Respeak knows about, installed or not (docs/flow.md B4.5).
 
     `installed` is what the UI gates the backend selector on; `reason` says what to run when a
     backend is missing. `languages` is always the full set the backend speaks, so the UI can tell
-    a user which languages an extra would unlock. `voices` is the Phase 3 picker: `{lang: [Voice]}`,
+    a user which languages an extra would unlock. `voices` feeds the voice picker: `{lang: [Voice]}`,
     empty for a backend that clones the original speaker.
     """
     infos: dict[str, BackendInfo] = {}

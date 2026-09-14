@@ -1,4 +1,4 @@
-"""Shared types for the pipeline (flow.md B4).
+"""Shared types for the pipeline (docs/flow.md B4).
 
 Every stage imports its types from here, so the contract lives in one file.
 """

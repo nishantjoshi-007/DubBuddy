@@ -1,4 +1,4 @@
-"""Build `subs.srt` from the placed, translated cues (flow.md B4.7, plan.md 1.8).
+"""Build `subs.srt` from the placed, translated cues (docs/flow.md B4.7).
 
 The times come straight from `audio.place()`, so a cue always covers the audio it describes — there is
 no second transcription pass, and no truncation to whole seconds (Part A's bug).

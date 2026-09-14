@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 def _start_ytdlp_update(settings: Settings) -> threading.Thread | None:
-    """Kick off the yt-dlp upgrade in a daemon thread when `YTDLP_AUTO_UPDATE` is on (plan.md 2.0).
+    """Kick off the yt-dlp upgrade in a daemon thread when `YTDLP_AUTO_UPDATE` is on.
 
     A daemon thread, never the event loop and never inline: `uv pip install` takes seconds to a minute
     and the server must answer `/api/health` immediately. Daemon, so a shutdown during the download

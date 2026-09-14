@@ -1,7 +1,7 @@
-"""ffmpeg / ffprobe / deno helpers (flow.md B4).
+"""ffmpeg / ffprobe / deno helpers (docs/flow.md B4).
 
 Every piece of media work in the pipeline goes through one of these subprocess wrappers: there is no
-moviepy, no OpenCV and no pydub anywhere (decisions.md D-05). Failures raise `FFmpegError` carrying the
+moviepy, no OpenCV and no pydub anywhere . Failures raise `FFmpegError` carrying the
 tail of stderr — nothing here ever returns None to signal a problem.
 """
 
@@ -101,7 +101,7 @@ def run_progress(
     *,
     timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run ffmpeg with `-progress pipe:1 -nostats`, calling `on_seconds` while it encodes (plan.md 3.1).
+    """Run ffmpeg with `-progress pipe:1 -nostats`, calling `on_seconds` while it encodes.
 
     Same contract as `run()` — a non-zero exit raises `FFmpegError` carrying the tail of stderr — with
     two differences: stdout belongs to the progress reader (the returned `stdout` is empty), and

@@ -1,7 +1,7 @@
 """Fit each spoken clip to its slot, place it on the timeline, assemble `dubbed.wav`.
 
-flow.md B4.6, plan.md 1.7, decisions.md D-09 (per-segment `atempo`, never a global speed change) and
-D-49 (never cut speech: slow the *picture* down instead).
+docs/flow.md B4.6: per-segment `atempo`, never a global speed change, and never cut speech —
+slow the *picture* down instead (docs/decisions.md, "When the dub is longer than the video").
 
     slot_i    = seg.end - seg.start
     factor_i  = min(clip_seconds / slot_i, 1.3) when the clip is too long, else 1.0
@@ -131,7 +131,7 @@ def stretch_factor(
     fitted_seconds: Sequence[float],
     video_seconds: float,
 ) -> float:
-    """The smallest factor the video must be slowed by for every clip to fit (D-49, flow.md B4.6).
+    """The smallest factor the video must be slowed by for every clip to fit (docs/flow.md B4.6).
 
         s = max(1, max_i  Σ_{j≥i} d_j / (V − start_i))
 
@@ -169,10 +169,10 @@ def place(
     *,
     stretch: float = 1.0,
 ) -> list[Placed]:
-    """Lay the fitted clips on the timeline, never overlapping (flow.md B4.6).
+    """Lay the fitted clips on the timeline, never overlapping (docs/flow.md B4.6).
 
     `segments[i].text` is what the subtitle will say, so callers pass the *translated* segments.
-    `stretch` is the factor the picture is being slowed by (D-49): every original start moves to
+    `stretch` is the factor the picture is being slowed by: every original start moves to
     `stretch · seg.start`, which keeps each sentence over the shot it belongs to; the cascade that
     pushes a long clip into the next slot is unchanged.
     """
@@ -193,7 +193,7 @@ def place(
 
 
 class AssembleResult(NamedTuple):
-    """`dubbed.wav` and what the video's length cost it (flow.md B4.6)."""
+    """`dubbed.wav` and what the video's length cost it (docs/flow.md B4.6)."""
 
     path: Path
     dropped_seconds: float = 0.0
