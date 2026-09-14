@@ -7,8 +7,12 @@ YouTube test only probes metadata and skips itself when the network is unreachab
 from __future__ import annotations
 
 import os
+import shutil
 import socket
+import sys
+import types
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -184,6 +188,33 @@ def test_probe_summary_marks_audio_only_files(tmp_path: Path) -> None:
     probe = ffmpeg.probe_summary(tone)
     assert probe.has_video is False
     assert probe.width == 0
+
+
+def test_run_progress_follows_out_time_to_the_end_of_the_encode(tmp_path: Path) -> None:
+    """3.1: `-progress pipe:1` lines become seconds of output, in order, never past the real length."""
+    source = make_video(tmp_path / "src.mp4", seconds=4.0, size="160x120")
+    seen: list[float] = []
+    proc = ffmpeg.run_progress(
+        ["-i", str(source), "-c:v", "libx264", "-preset", "ultrafast", str(tmp_path / "out.mp4")],
+        seen.append,
+    )
+    assert proc.returncode == 0
+    assert seen, "ffmpeg printed no progress block at all"
+    assert seen == sorted(seen), seen  # microseconds, parsed once per block, never backwards
+    assert seen[-1] == pytest.approx(4.0, abs=0.3)
+    assert ffmpeg.duration(tmp_path / "out.mp4") == pytest.approx(4.0, abs=0.3)
+
+
+def test_run_progress_reports_a_failure_like_run_does(tmp_path: Path) -> None:
+    with pytest.raises(FFmpegError) as excinfo:
+        ffmpeg.run_progress(["-i", str(tmp_path / "nope.mp4"), str(tmp_path / "out.mp4")], lambda _: None)
+    assert "ffmpeg failed with exit code" in str(excinfo.value)
+    assert "No such file" in str(excinfo.value)
+
+
+def test_run_progress_refuses_ffprobe() -> None:
+    with pytest.raises(ValueError, match="no -progress"):
+        ffmpeg.run_progress(["ffprobe", "-i", "x.mp4"], lambda _: None)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -393,6 +424,93 @@ def test_extract_audio_reference_prefers_the_loudest_window(tmp_path: Path) -> N
     source_wav, reference_wav = inputs.extract_audio(quiet_first, tmp_path)
     assert wav_info(reference_wav)[2] == pytest.approx(30.0, abs=0.1)
     assert rms(reference_wav) > rms(source_wav, 0.0, 30.0) * 1.3
+
+
+# --------------------------------------------------------------------------------------------------
+# inputs.py — the reference clip chosen from the transcript (plan.md 3.7)
+# --------------------------------------------------------------------------------------------------
+
+
+def test_speech_window_start_picks_the_busiest_thirty_seconds() -> None:
+    segments = [Segment(20.0, 25.0, "a"), Segment(26.0, 30.0, "b"), Segment(31.0, 40.0, "c")]
+    assert inputs.speech_window_start(segments, 30.0, 60.0) == pytest.approx(20.0, abs=1.0)
+
+
+def test_speech_window_start_falls_back_to_the_front() -> None:
+    assert inputs.speech_window_start([], 30.0, 60.0) == 0.0  # no speech at all
+    assert inputs.speech_window_start([Segment(5.0, 9.0, "a")], 30.0, 20.0) == 0.0  # shorter than a window
+
+
+def test_speech_window_start_never_runs_past_the_end() -> None:
+    """A sentence 5 s before the end cannot start a 30 s window there; the window is pulled back."""
+    start = inputs.speech_window_start([Segment(55.0, 58.0, "late")], 30.0, 60.0)
+    assert start == pytest.approx(30.0)
+
+
+def test_reference_from_segments_cuts_the_window_holding_the_speech(tmp_path: Path) -> None:
+    """60 s, tone only between 20 s and 40 s: the clip must start at the speech, not at the file."""
+    source_wav = tmp_path / "source.wav"
+    ffmpeg.run(
+        [
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=16000:duration=60",
+            "-af",
+            "volume=volume=0:enable='not(between(t,20,40))'",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(source_wav),
+        ]
+    )
+    segments = [Segment(20.0, 25.0, "a"), Segment(26.0, 30.0, "b"), Segment(31.0, 40.0, "c")]
+
+    reference = inputs.reference_from_segments(source_wav, segments, tmp_path / "reference.wav")
+
+    rate, channels, seconds = wav_info(reference)
+    assert (rate, channels) == (24_000, 1)
+    assert seconds <= inputs.REFERENCE_SECONDS + 0.05
+    assert seconds == pytest.approx(30.0, abs=0.1)
+    # The window is [20, 50]: its first 20 s carry the tone, its last 10 s the silence after it.
+    quiet = rms(source_wav, 0.0, 19.0)
+    assert rms(reference, 0.0, 19.0) > max(0.02, quiet * 10), "the reference starts before the speech does"
+    assert rms(reference, 21.0, 30.0) < 0.01
+
+
+def test_reference_from_segments_beats_the_loudest_window_on_a_noisy_intro(tmp_path: Path) -> None:
+    """plan.md 3.7 'done when': 20 s of loud music first, quieter speech after — speech must win."""
+    source_wav = tmp_path / "source.wav"
+    ffmpeg.run(
+        [
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=200:sample_rate=16000:duration=60",
+            "-af",
+            "volume=volume=0.05:enable='gt(t,20)',volume=volume=0:enable='gt(t,45)'",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(source_wav),
+        ]
+    )
+    segments = [Segment(21.0, 30.0, "hello"), Segment(31.0, 44.0, "world")]
+    loud = rms(source_wav, 0.0, 20.0)
+
+    reference = inputs.reference_from_segments(source_wav, segments, tmp_path / "reference.wav")
+
+    assert wav_info(reference)[0] == 24_000
+    # The loudest 30 s window starts at 0; this one starts at the first sentence instead.
+    assert rms(reference, 0.0, 20.0) < loud / 5, "the music won the window again"
+    assert rms(reference, 0.0, 20.0) > 0.001, "the reference holds no sound at all"
+
+
+def test_reference_from_segments_reports_a_missing_source(tmp_path: Path) -> None:
+    with pytest.raises(InputError, match="is missing"):
+        inputs.reference_from_segments(tmp_path / "ghost.wav", [], tmp_path / "reference.wav")
 
 
 # --------------------------------------------------------------------------------------------------
@@ -669,6 +787,31 @@ def test_mux_refuses_to_burn_without_subtitles(sample_video: Path, dubbed: Path,
         mux.mux(sample_video, dubbed, None, burn=True, lang="es", out=tmp_path / "never.mp4")
 
 
+def test_mux_reports_progress_that_climbs_to_one(sample_video: Path, dubbed: Path, tmp_path: Path) -> None:
+    """3.1: with a callback, mux parses `-progress` and always finishes on 1.0."""
+    subs = subtitles.build_srt([Cue(1.0, 3.0, "Hola mundo")], tmp_path / "subs.srt")
+    seen: list[float] = []
+    out = mux.mux(
+        sample_video, dubbed, subs, burn=True, lang="es", out=tmp_path / "out.mp4", progress=seen.append
+    )
+    assert out.is_file() and out.stat().st_size > 0
+    assert seen, "no progress was reported at all"
+    assert seen == sorted(seen), seen
+    assert all(0.0 <= value <= 1.0 for value in seen), seen
+    assert seen[-1] == 1.0
+    assert ffmpeg.duration(out) == pytest.approx(10.0, abs=0.5)
+
+
+def test_mux_without_burn_still_reports_progress(sample_video: Path, dubbed: Path, tmp_path: Path) -> None:
+    """A stream copy can finish before ffmpeg prints a block; the bar must still reach the end."""
+    seen: list[float] = []
+    mux.mux(
+        sample_video, dubbed, None, burn=False, lang="es", out=tmp_path / "copy.mp4", progress=seen.append
+    )
+    assert seen[-1] == 1.0
+    assert seen == sorted(seen)
+
+
 def test_mux_reports_a_missing_input(sample_video: Path, tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="dubbed audio"):
         mux.mux(sample_video, tmp_path / "ghost.wav", None, burn=False, lang="es", out=tmp_path / "x.mp4")
@@ -685,6 +828,81 @@ def test_escape_filter_path_quotes_the_specials() -> None:
     escaped = mux.escape_filter_path("/tmp/it's a:dir/subs.srt")
     assert escaped.startswith("'") and escaped.endswith("'")
     assert r"\:" in escaped
+
+
+# --------------------------------------------------------------------------------------------------
+# inputs.py — the download progress hook (offline: yt-dlp itself is replaced)
+# --------------------------------------------------------------------------------------------------
+
+
+class FakeYoutubeDL:
+    """Enough of `yt_dlp.YoutubeDL` to prove the hook wiring: it reports bytes, then writes the file."""
+
+    #: 3.1 MB of 7.4 MB, then the whole thing — the numbers the assertions below spell out.
+    EVENTS = (
+        {"status": "downloading", "downloaded_bytes": 3_250_585, "total_bytes": 7_759_462},
+        {"status": "downloading", "downloaded_bytes": 7_759_462, "total_bytes": 7_759_462},
+        {"status": "finished"},
+    )
+    source: Path
+
+    def __init__(self, opts: dict[str, object]) -> None:
+        self.opts = opts
+
+    def __enter__(self) -> FakeYoutubeDL:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+    def download(self, urls: list[str]) -> None:
+        hooks: list[Any] = list(self.opts.get("progress_hooks") or [])  # type: ignore[arg-type]
+        for hook in hooks:
+            for event in self.EVENTS:
+                hook(dict(event))
+        target = Path(str(self.opts["outtmpl"]).replace("%(ext)s", "mp4"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(type(self).source, target)
+
+
+def test_fetch_youtube_reports_bytes_through_the_progress_hook(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """3.1: yt-dlp's progress_hooks become (fraction, "downloading 3.1 MB of 7.4 MB")."""
+    FakeYoutubeDL.source = make_video(tmp_path / "served.mp4", seconds=2.0, size="160x120", vcodec="libx264")
+    module = types.ModuleType("yt_dlp")
+    module.YoutubeDL = FakeYoutubeDL  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    seen: list[tuple[float, str]] = []
+
+    out = inputs.fetch_youtube(
+        "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+        tmp_path / "job",
+        settings,
+        lambda fraction, detail: seen.append((fraction, detail)),
+    )
+
+    assert out.name == "source.mp4" and out.stat().st_size > 0
+    assert [fraction for fraction, _ in seen] == sorted(fraction for fraction, _ in seen)
+    assert seen[0] == (pytest.approx(0.419, abs=0.01), "downloading 3.1 MB of 7.4 MB")
+    assert seen[1] == (1.0, "downloading 7.4 MB of 7.4 MB")
+    assert seen[-1] == (1.0, "merging the download")
+
+
+def test_fetch_youtube_survives_a_hook_that_cannot_write(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed status write is cosmetic: it must never turn into "YouTube download failed"."""
+    FakeYoutubeDL.source = make_video(tmp_path / "served.mp4", seconds=2.0, size="160x120", vcodec="libx264")
+    module = types.ModuleType("yt_dlp")
+    module.YoutubeDL = FakeYoutubeDL  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+
+    def explode(fraction: float, detail: str) -> None:
+        raise OSError("status.json is on a full disk")
+
+    out = inputs.fetch_youtube("https://www.youtube.com/watch?v=x", tmp_path / "job", settings, explode)
+    assert out.is_file()
 
 
 # --------------------------------------------------------------------------------------------------

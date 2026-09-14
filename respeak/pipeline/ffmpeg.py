@@ -12,6 +12,9 @@ import logging
 import shlex
 import shutil
 import subprocess
+import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,12 @@ log = logging.getLogger(__name__)
 
 STDERR_TAIL_LINES = 30
 """How many trailing lines of stderr a FFmpegError carries."""
+
+PROGRESS_ARGS: tuple[str, ...] = ("-progress", "pipe:1", "-nostats")
+"""Makes ffmpeg print `key=value` blocks on stdout instead of the interactive stats line."""
+
+SecondsCallback = Callable[[float], None]
+"""Called with the length of output ffmpeg has written so far, in seconds."""
 
 _TOOLS = ("ffmpeg", "ffprobe")
 
@@ -84,6 +93,108 @@ def run(args: list[str], *, timeout: float | None = None) -> subprocess.Complete
     if proc.returncode != 0:
         raise FFmpegError(_failure_message(binary, cmd, proc.returncode, proc.stderr))
     return proc
+
+
+def run_progress(
+    args: list[str],
+    on_seconds: SecondsCallback,
+    *,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run ffmpeg with `-progress pipe:1 -nostats`, calling `on_seconds` while it encodes (plan.md 3.1).
+
+    Same contract as `run()` — a non-zero exit raises `FFmpegError` carrying the tail of stderr — with
+    two differences: stdout belongs to the progress reader (the returned `stdout` is empty), and
+    stderr is spooled to a temporary file so a chatty encode can never deadlock on a full pipe.
+    `on_seconds` is only called when the output time moves forward, never twice for the same block.
+    """
+    if not args:
+        raise ValueError("ffmpeg.run_progress() needs at least one argument")
+    binary, rest = _split_binary(args)
+    if Path(binary).name.startswith("ffprobe"):
+        raise ValueError("ffprobe has no -progress output; use ffmpeg.run() for it")
+    cmd = [binary, "-hide_banner", "-nostdin", "-y", *PROGRESS_ARGS, *(str(a) for a in rest)]
+    if shutil.which(binary) is None:
+        ensure_binaries()
+    log.debug("running (with progress): %s", shlex.join(cmd))
+    deadline = None if timeout is None else time.monotonic() + timeout
+
+    with tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace") as errfile:
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=errfile,
+                text=True,
+                errors="replace",
+                bufsize=1,
+            )
+        except FileNotFoundError as exc:
+            raise FFmpegError(
+                f"{binary} is not on PATH. Install it, or make sure ensure_binaries() ran first."
+            ) from exc
+        reported = -1.0
+        try:
+            if proc.stdout is None:  # pragma: no cover - stdout=PIPE above always gives a pipe
+                raise FFmpegError(f"{binary} gave no stdout to read progress from")
+            for line in proc.stdout:
+                seconds = _progress_seconds(line)
+                if seconds is not None and seconds > reported:
+                    reported = seconds
+                    on_seconds(seconds)
+                if deadline is not None and time.monotonic() > deadline:
+                    raise FFmpegError(f"{binary} timed out after {timeout} s: {shlex.join(cmd)}")
+            try:
+                left = None if deadline is None else max(0.1, deadline - time.monotonic())
+                returncode = proc.wait(timeout=left)
+            except subprocess.TimeoutExpired as exc:
+                raise FFmpegError(f"{binary} timed out after {timeout} s: {shlex.join(cmd)}") from exc
+        except BaseException:
+            proc.kill()
+            proc.wait()
+            raise
+        finally:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        errfile.seek(0)
+        stderr = errfile.read()
+
+    if returncode != 0:
+        raise FFmpegError(_failure_message(binary, cmd, returncode, stderr))
+    return subprocess.CompletedProcess(cmd, returncode, stdout="", stderr=stderr)
+
+
+def _progress_seconds(line: str) -> float | None:
+    """The output time carried by one `-progress` line, or None for every other key.
+
+    ffmpeg prints `out_time_us` and `out_time_ms` with the same microsecond value (an upstream quirk,
+    checked on 8.0), so both are read as microseconds and `out_time` is parsed as a clock.
+    """
+    key, sep, value = line.strip().partition("=")
+    value = value.strip()
+    if not sep or not value or value == "N/A":
+        return None
+    if key in ("out_time_us", "out_time_ms"):
+        micros = _as_float(value)
+        return None if micros is None else micros / 1_000_000.0
+    if key == "out_time":
+        return _clock_seconds(value)
+    return None
+
+
+def _clock_seconds(value: str) -> float | None:
+    """'00:01:03.500000' → 63.5; None when ffmpeg wrote something else."""
+    parts = value.split(":")
+    if len(parts) != 3:
+        return None
+    total = 0.0
+    for part in parts:
+        number = _as_float(part)
+        if number is None:
+            return None
+        total = total * 60.0 + number
+    return total
 
 
 def probe(path: Path | str) -> dict[str, Any]:

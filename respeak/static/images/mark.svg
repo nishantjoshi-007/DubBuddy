@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Respeak">
+  <title>Respeak</title>
+  <rect width="32" height="32" rx="8" fill="#12161b"/>
+  <rect x="14.8" y="9" width="2.4" height="14" rx="1.2" fill="#f2f5f8"/>
+  <g fill="none" stroke-linecap="round" stroke-width="2.6">
+    <path d="M10.5 11.5a6 6 0 0 0 0 9" stroke="#f2f5f8"/>
+    <path d="M21.5 11.5a6 6 0 0 1 0 9" stroke="#ffc93c"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-width="2">
+    <path d="M6.3 8.6a10.5 10.5 0 0 0 0 14.8" stroke="#f2f5f8" opacity=".4"/>
+    <path d="M25.7 8.6a10.5 10.5 0 0 1 0 14.8" stroke="#ffc93c" opacity=".5"/>
+  </g>
+</svg>

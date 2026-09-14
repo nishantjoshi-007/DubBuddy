@@ -13,6 +13,7 @@ import logging
 import math
 import os
 import socket
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -20,7 +21,7 @@ from urllib.parse import urlparse
 from respeak.config import Settings
 from respeak.pipeline import ffmpeg
 from respeak.pipeline.ffmpeg import FFmpegError
-from respeak.pipeline.types import Probe
+from respeak.pipeline.types import Probe, Segment
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ REFERENCE_SAMPLE_RATE = 24_000
 MP4_VIDEO_CODECS: frozenset[str] = frozenset({"h264", "hevc"})
 MP4_AUDIO_CODECS: frozenset[str] = frozenset({"aac", "mp3"})
 """What an `.mp4` may hold and still play in a browser `<video>` (flow.md B4.8)."""
+
+DownloadProgress = Callable[[float, str], None]
+"""Called with (0–1 of the bytes fetched, a sentence like "downloading 3.1 MB of 7.4 MB")."""
 
 
 class InputError(Exception):
@@ -176,8 +180,16 @@ def probe_youtube(url: str, settings: Settings) -> Probe:
     )
 
 
-def fetch_youtube(url: str, dest_dir: Path, settings: Settings) -> Path:
-    """Download at most `MAX_HEIGHT` and return `dest_dir/source.mp4` (D-11, flow.md B4.2)."""
+def fetch_youtube(
+    url: str,
+    dest_dir: Path,
+    settings: Settings,
+    progress: DownloadProgress | None = None,
+) -> Path:
+    """Download at most `MAX_HEIGHT` and return `dest_dir/source.mp4` (D-11, flow.md B4.2).
+
+    `progress`, when given, is called from yt-dlp's `progress_hooks` as the bytes arrive (plan.md 3.1).
+    """
     ffmpeg.ensure_binaries()
     import yt_dlp
 
@@ -201,6 +213,8 @@ def fetch_youtube(url: str, dest_dir: Path, settings: Settings) -> Path:
         "fragment_retries": 3,
         "noprogress": True,
     }
+    if progress is not None:
+        opts["progress_hooks"] = [_download_hook(progress)]
     _add_cookiefile(opts, settings)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -219,6 +233,44 @@ def fetch_youtube(url: str, dest_dir: Path, settings: Settings) -> Path:
     remux(other, target)
     other.unlink(missing_ok=True)
     return target
+
+
+def _download_hook(progress: DownloadProgress) -> Callable[[dict[str, Any]], None]:
+    """A `progress_hooks` entry that turns yt-dlp's byte counts into a fraction and a sentence.
+
+    yt-dlp lets anything raised in a hook abort the download, and a status write is not worth losing a
+    download over, so the hook logs and swallows its own failures — the fetch itself still raises.
+    """
+
+    def hook(event: dict[str, Any]) -> None:
+        try:
+            status = str(event.get("status") or "")
+            if status == "downloading":
+                done = _as_bytes(event.get("downloaded_bytes"))
+                total = _as_bytes(event.get("total_bytes")) or _as_bytes(event.get("total_bytes_estimate"))
+                if total > 0:
+                    progress(min(1.0, done / total), f"downloading {_mb(done)} of {_mb(total)}")
+                else:
+                    progress(0.0, f"downloading {_mb(done)}")
+            elif status == "finished":
+                progress(1.0, "merging the download")
+        except Exception as exc:  # pragma: no cover - cosmetic; never worth failing a download
+            log.warning("download progress hook failed: %s", exc)
+
+    return hook
+
+
+def _as_bytes(raw: object) -> float:
+    """A byte count from yt-dlp's hook dict; 0.0 when it is missing or unparseable."""
+    try:
+        value = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+    return value if value > 0 else 0.0
+
+
+def _mb(count: float) -> str:
+    return f"{count / (1024 * 1024):.1f} MB"
 
 
 def _add_cookiefile(opts: dict[str, Any], settings: Settings) -> None:
@@ -451,6 +503,75 @@ def extract_audio(source_mp4: Path | str, dest_dir: Path | str) -> tuple[Path, P
             ]
         )
     return source_wav, reference_wav
+
+
+def reference_from_segments(
+    source_wav: Path | str,
+    segments: Sequence[Segment],
+    out: Path | str,
+    max_seconds: float = REFERENCE_SECONDS,
+) -> Path:
+    """Cut the ≤ `max_seconds` window of `source_wav` that holds the most speech (plan.md 3.7, B4.5).
+
+    Chosen from the ASR segments rather than from loudness: 20 s of music in front of the first
+    sentence wins the RMS contest and hands a cloning backend a reference with no voice in it. Falls
+    back to the first `max_seconds` when the transcript found no speech at all.
+    """
+    src = Path(source_wav)
+    dest = Path(out)
+    if not src.is_file():
+        raise InputError(f"cannot cut a reference clip: {src} is missing.")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    total = ffmpeg.duration(src)
+    if total <= 0:
+        raise InputError(f"{src.name} carries no audio to clone from.")
+    window = min(float(max_seconds), total)
+    start = speech_window_start(segments, window, total)
+    log.info("reference clip: %.1f s from %.1f s of %s (%d segments)", window, start, src.name, len(segments))
+    ffmpeg.run(
+        [
+            "-ss",
+            f"{start:.3f}",
+            "-t",
+            f"{window:.3f}",
+            "-i",
+            str(src),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            str(REFERENCE_SAMPLE_RATE),
+            "-c:a",
+            "pcm_s16le",
+            str(dest),
+        ]
+    )
+    if not dest.is_file() or dest.stat().st_size == 0:
+        raise InputError(f"ffmpeg wrote no reference clip for {src.name}.")
+    return dest
+
+
+def speech_window_start(segments: Sequence[Segment], window: float, total: float) -> float:
+    """Start of the `window` seconds covering the most speech; 0.0 when there is none to cover.
+
+    Only the segment starts are tried (plus 0.0): the best window in practice begins with a sentence,
+    and a tie keeps the earliest start, so a clip whose speech is evenly spread stays at the front.
+    """
+    if window >= total or not segments:
+        return 0.0
+    limit = max(0.0, total - window)
+    best_start, best_speech = 0.0, -1.0
+    for candidate in (0.0, *(float(segment.start) for segment in segments)):
+        start = min(max(0.0, candidate), limit)
+        covered = sum(_overlap(segment, start, start + window) for segment in segments)
+        if covered > best_speech:
+            best_start, best_speech = start, covered
+    return best_start
+
+
+def _overlap(segment: Segment, start: float, end: float) -> float:
+    """Seconds of `segment` inside [start, end]."""
+    return max(0.0, min(float(segment.end), end) - max(float(segment.start), start))
 
 
 def _loudest_window_start(wav: Path, window: float, total: float) -> float:

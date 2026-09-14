@@ -460,7 +460,13 @@ Form fields: source tabs (YouTube URL / upload, upload tab hidden when `ALLOW_UP
 
 `GET /api/backends` (Phase 3.3): each backend also carries `voices: {lang: [{id, name}]}`; Chatterbox's is empty because it clones.
 
-Rate limit (Phase 3.5): `RATE_LIMIT_JOBS="10/hour"` (off by default) — token bucket per client IP on `POST /jobs`; `X-Forwarded-For` honoured only with `TRUST_PROXY=true`; 429 `{"error": …}`.
+Rate limit (Phase 3.5): `RATE_LIMIT_JOBS="10/hour"` (off by default) — token bucket per client IP, applied in the middleware before the body is parsed (after the Content-Length check, so an oversize upload costs no token); 429 `{"error": …}` with `Retry-After`. With `TRUST_PROXY=true` the client is the **last** `X-Forwarded-For` entry (the one the trusted proxy appended; the leftmost is client-supplied), parsed as an IP or ignored; the bucket table is capped and evicts the oldest addresses. `respeak serve` passes the matching `forwarded_allow_ips` to uvicorn.
+
+```text
+why the last entry:   client sends  X-Forwarded-For: 1.1.1.1
+                      nginx appends   X-Forwarded-For: 1.1.1.1, 203.0.113.9   ← 203.0.113.9 is what nginx saw
+                      trusting the first entry would give every request a fresh bucket
+```
 
 CLI (Phase 3.2): `respeak dub <url-or-file> --to LANG [--from LANG] [--backend …] [--voice ID] [--no-burn] [--out PATH] [--data-dir DIR]`, `respeak serve`, `respeak prewarm`; same `run_job`, progress on stderr, exit 0/1.
 

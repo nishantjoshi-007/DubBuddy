@@ -59,16 +59,34 @@ uv run python -m unidic download                                            # Ja
 uv run python -m respeak.prewarm --languages en,es,fr                       # download models ahead of time
 ```
 
+## Command line
+
+The same pipeline without the browser, for scripts and batch work:
+
+```bash
+uv run respeak dub video.mp4 --to es                        # a local file
+uv run respeak dub https://youtu.be/... --to fr --voice ff_siwis --no-burn --out out.mp4
+uv run respeak serve --port 8000                            # the web app
+uv run respeak prewarm --languages en,es,ja                 # download models ahead of time
+```
+
+Progress prints to stderr, the output path to stdout, and the exit code is 0 on success.
+
 ## Backends and languages
 
 | Backend | License | Voice cloning | Languages | Runs on |
 |---|---|---|---|---|
 | Kokoro (default) | Apache-2.0 | no, one curated voice per language | en, es, fr, hi, it, ja, pt, zh | CPU, about real time |
-| Chatterbox Multilingual | MIT | yes, from the original speaker | 23 languages | GPU recommended |
+| Chatterbox Multilingual | MIT | yes, from the original speaker | ar, da, de, el, en, es, fi, fr, he, hi, it, ja, ko, ms, nl, no, pl, pt, ru, sv, sw, tr, zh (23) | GPU recommended; about 80 s per sentence on CPU |
 
 Select with `TTS_BACKEND=kokoro|chatterbox` in `.env`; when both are installed the page shows a selector.
-The target-language list always follows the selected backend. Source language is auto-detected, with
-an override under Advanced.
+The target-language list always follows the selected backend, and Kokoro offers a voice picker per
+language (54 voices). Source language is auto-detected, with an override under Advanced.
+
+Chatterbox has no voice list — it clones the speaker in the video — and it downloads a 3 GB checkpoint
+the first time it runs. On CPU it is a demo, not a workflow: measured on a 4-core laptop, loading the
+model takes 25–50 s and each sentence takes 70–90 s, about 25x slower than real time, so a one-minute
+video is hours. Use Kokoro unless you have a GPU.
 
 ## Configuration
 
@@ -88,6 +106,8 @@ Every setting is an environment variable or a line in `.env`. Defaults in `.env.
 | `ALLOW_UPLOADS` | `true` | set `false` to accept YouTube URLs only |
 | `YTDLP_COOKIES_FILE` | unset | Netscape cookies file for YouTube's "confirm you're not a bot" wall |
 | `YTDLP_AUTO_UPDATE` | `false` (`true` in Docker) | update yt-dlp at startup |
+| `RATE_LIMIT_JOBS` | unset | per-address submission limit for public servers, e.g. `10/hour` |
+| `TRUST_PROXY` | `false` | honour `X-Forwarded-For` for the rate limit, only behind a reverse proxy (`respeak serve` passes the matching `--forwarded-allow-ips` to uvicorn; with plain uvicorn set it yourself) |
 | `PREWARM_LANGUAGES` | `en,es` | languages `python -m respeak.prewarm` downloads models for |
 
 ## How long does it take

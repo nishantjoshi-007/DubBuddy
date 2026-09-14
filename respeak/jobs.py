@@ -136,11 +136,13 @@ class JobStore:
                 "to_lang": options["to_lang"],
                 "from_lang": options.get("from_lang"),
                 "backend": options.get("backend"),
+                "voice": options.get("voice"),  # a backend voice id, or None for its default
                 "burn_subtitles": bool(options.get("burn_subtitles", True)),
             },
             "output": None,
             "download_url": None,
             "warnings": [],
+            "detail": None,
         }
         self._write(job_id, _derive(status))
         log.info("job %s created (%s → %s)", job_id, source_type, status["options"]["to_lang"])
@@ -209,9 +211,14 @@ class JobStore:
         return self.update(job_id, **fields)
 
     def fail(self, job_id: str, error: str) -> dict[str, Any]:
-        """Move the job to ``failed`` with a visible message (flow.md B8: never a silent None)."""
+        """Move the job to ``failed`` with a visible message (flow.md B8: never a silent None).
+
+        ``detail`` is cleared with it: it is the sentence for work that is *happening now*, and a
+        failed job leaving "speaking segment 4 of 12" on the page next to the error reads as if the
+        job were somehow still going. Only ``error`` speaks for a failed job.
+        """
         log.error("job %s failed: %s", job_id, error)
-        return self.update(job_id, state="failed", error=str(error))
+        return self.update(job_id, state="failed", error=str(error), detail=None)
 
     def delete(self, job_id: str) -> None:
         """Remove the whole job directory. Missing is not an error."""

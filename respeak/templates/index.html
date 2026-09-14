@@ -5,36 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Respeak</title>
   <meta name="description" content="Dub a video into another language: transcribe, translate, re-voice, subtitle, mux." />
-  <link rel="icon" type="image/x-icon" href="/static/images/logo.ico" />
+  <meta name="color-scheme" content="light dark" />
+  <link rel="icon" type="image/svg+xml" href="/static/images/mark.svg" />
   <link rel="stylesheet" href="/static/app.css" />
+  <script>
+    // Apply the saved theme before the first paint, so a preference that disagrees with the
+    // operating system never flashes the wrong colours. toggle.js owns everything after this.
+    try {
+      var t = localStorage.getItem("theme");
+      if (t === "dark" || t === "light") document.documentElement.classList.add(t + "-theme");
+    } catch (e) { /* private mode: prefers-color-scheme decides */ }
+  </script>
 </head>
 <body data-job-id="{{ job_id }}">
-  <header class="header">
-    <a href="/" class="brand"><img src="/static/images/logo.png" alt="" width="32" height="26" /> Respeak</a>
-    <nav>
-      <a href="https://github.com/nishantjoshi-007/DubBuddy" rel="noopener">GitHub</a>
+  <a class="skip-link" href="#main">Skip to the form</a>
+
+  <header class="site-head">
+    <a href="/" class="brand" aria-label="Respeak, home">
+      <svg class="brand__mark" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false">
+        <rect x="13" y="8" width="2" height="12" rx="1" fill="currentColor" />
+        <g fill="none" stroke-width="2" stroke-linecap="round">
+          <path d="M9.4 10.4a5 5 0 0 0 0 7.2" stroke="currentColor" />
+          <path d="M5.8 7.6a9 9 0 0 0 0 12.8" stroke="currentColor" opacity=".4" />
+          <path d="M18.6 10.4a5 5 0 0 1 0 7.2" stroke="var(--accent)" />
+          <path d="M22.2 7.6a9 9 0 0 1 0 12.8" stroke="var(--accent)" opacity=".55" />
+        </g>
+      </svg>
+      <span class="brand__word">Respeak</span>
+    </a>
+    <nav class="site-nav">
       {% include "toggle.html" %}
     </nav>
   </header>
 
-  <main class="main">
+  <main class="main" id="main">
     <noscript>
-      <p class="alert">Respeak needs JavaScript: the page submits the job and polls its progress in the browser.</p>
+      <p class="alert">Respeak needs JavaScript: the page submits the job and follows its progress in the browser.</p>
     </noscript>
 
-    <!-- Job form (flow.md B6). Hidden once a job is running on this page. -->
-    <section class="panel" id="form-panel">
-      <h1 class="title">Dub a video into another language</h1>
-      <p class="lede">Respeak transcribes the speech, translates it, speaks it in the target language and puts it back on the video.</p>
+    <!-- Job form (flow.md B6). Replaced in place by the job view once a job is running. -->
+    <section id="form-panel">
+      <h1 class="display">Dub a video into another language</h1>
+      <p class="cue">Respeak listens to what is said, translates it, and speaks it again over the same picture.</p>
 
-      <form id="job-form" novalidate>
+      <form class="card" id="job-form" novalidate>
         <input type="hidden" name="source_type" id="source-type" value="youtube" />
 
-        <div class="tabs" role="tablist" aria-label="Video source">
-          <button type="button" class="tab is-active" id="tab-youtube" role="tab" aria-selected="true"
-                  aria-controls="source-youtube" data-source="youtube">YouTube URL</button>
-          <button type="button" class="tab" id="tab-upload" role="tab" aria-selected="false"
-                  aria-controls="source-upload" data-source="upload" hidden>Upload file</button>
+        <div class="seg" role="tablist" aria-label="Video source">
+          <button type="button" class="seg__btn is-active" id="tab-youtube" role="tab" aria-selected="true"
+                  aria-controls="source-youtube" data-source="youtube">Video link</button>
+          <button type="button" class="seg__btn" id="tab-upload" role="tab" aria-selected="false"
+                  aria-controls="source-upload" data-source="upload" tabindex="-1" hidden>Upload a file</button>
         </div>
 
         <div class="source" id="source-youtube" role="tabpanel" aria-labelledby="tab-youtube">
@@ -45,73 +66,100 @@
 
         <div class="source" id="source-upload" role="tabpanel" aria-labelledby="tab-upload" hidden>
           <label class="label" for="file">Video file</label>
-          <input class="control" type="file" id="file" name="file" accept="video/*" disabled />
+          <input class="control control--file" type="file" id="file" name="file" accept="video/*" disabled />
         </div>
 
         <div class="field-row">
           <div class="field">
             <label class="label" for="to-lang">Dub into</label>
-            <select class="control" id="to-lang" name="to_lang" required></select>
+            <select class="control control--select" id="to-lang" name="to_lang" required></select>
           </div>
           <div class="field" id="backend-field" hidden>
             <label class="label" for="backend">Voice engine</label>
-            <select class="control" id="backend" name="backend"></select>
+            <select class="control control--select" id="backend" name="backend"></select>
+          </div>
+          <div class="field" id="voice-field" hidden>
+            <label class="label" for="voice">Voice</label>
+            <select class="control control--select" id="voice" name="voice" disabled></select>
           </div>
         </div>
 
-        <label class="checkbox" for="burn-subtitles">
-          <input type="checkbox" id="burn-subtitles" name="burn_subtitles" checked />
-          <span>Burn subtitles into the video</span>
+        <label class="check" for="burn-subtitles">
+          <input class="check__box" type="checkbox" id="burn-subtitles" name="burn_subtitles" checked />
+          <span class="check__text">Burn subtitles into the video</span>
         </label>
 
         <details class="advanced">
-          <summary>Advanced</summary>
+          <summary class="advanced__summary">Advanced</summary>
           <div class="field">
             <label class="label" for="from-lang">Language spoken in the video</label>
-            <select class="control" id="from-lang" name="from_lang">
-              <option value="">Auto-detect</option>
+            <select class="control control--select" id="from-lang" name="from_lang">
+              <option value="">Detect it for me</option>
             </select>
-            <p class="hint">Leave this on auto-detect unless the detected language comes out wrong.</p>
+            <p class="hint">Leave this alone unless the detected language comes out wrong.</p>
           </div>
         </details>
 
         <p class="alert" id="form-error" role="alert" hidden></p>
 
         <div class="submit-row">
-          <button class="button" type="submit" id="submit-button">Start dubbing</button>
+          <button class="btn" type="submit" id="submit-button">Start dubbing</button>
           <p class="rights">By submitting you confirm you have the right to use this video.</p>
         </div>
       </form>
     </section>
 
-    <!-- Result area: step list, progress, errors, then the finished video. -->
-    <section class="panel" id="result-panel" hidden>
+    <!-- Job view: the same stage, showing one job's progress and then its video. -->
+    <section id="result-panel" hidden>
       <div class="job-head">
-        <h1 class="title" id="job-title">Preparing your job</h1>
-        <span class="badge" id="job-state">queued</span>
+        <h1 class="job-title" id="job-title">Preparing your job</h1>
+        <span class="badge" id="job-state" data-state="queued">Queued</span>
       </div>
-      <p class="job-meta" id="job-meta"></p>
 
-      <div class="progress" id="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-           aria-valuenow="0" aria-label="Job progress">
-        <div class="progress__fill" id="progress-fill"></div>
+      <dl class="facts" id="job-meta"></dl>
+
+      <div class="card card--run" id="run-card">
+        <div class="progress" id="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="0" aria-label="Job progress">
+          <div class="progress__fill" id="progress-fill"></div>
+        </div>
+        <div class="readout" aria-live="polite">
+          <p class="readout__step" id="status-line">Waiting for the job to start.</p>
+          <p class="readout__detail" id="job-detail" hidden></p>
+        </div>
+
+        <ol class="rail" id="step-list"></ol>
       </div>
-      <p class="status-line" id="status-line" aria-live="polite">Waiting for the job to start…</p>
 
-      <ol class="steps" id="step-list"></ol>
+      <div class="notice" id="job-warnings" role="status" hidden>
+        <span class="notice__mark" aria-hidden="true"></span>
+        <div class="notice__body">
+          <p class="notice__title">Worth knowing</p>
+          <ul class="notice__list" id="job-warning-list"></ul>
+        </div>
+      </div>
 
       <p class="alert" id="job-error" role="alert" hidden></p>
 
-      <div class="output" id="output" hidden>
-        <video class="video" id="output-video" controls preload="metadata" playsinline></video>
-        <p><a class="button" id="download-link" download>Download the dubbed video</a></p>
+      <div class="done" id="output" hidden>
+        <video class="done__video" id="output-video" controls preload="metadata" playsinline></video>
+        <div class="done__row">
+          <div class="done__info">
+            <p class="done__pair" id="done-pair"></p>
+            <p class="done__file" id="done-file"></p>
+          </div>
+          <a class="btn" id="download-link" download>Download the video</a>
+        </div>
       </div>
 
-      <p><a href="/" id="new-job">Dub another video</a></p>
+      <p class="again"><a href="/" id="new-job">Dub another video</a></p>
     </section>
   </main>
 
-  <footer class="footer">Respeak · MIT licensed · <a href="https://github.com/nishantjoshi-007/DubBuddy" rel="noopener">source</a></footer>
+  <footer class="site-foot">
+    <span>Respeak is MIT licensed.</span>
+    <a href="https://github.com/nishantjoshi-007/DubBuddy" rel="noopener">Read the source</a>
+  </footer>
 
   <script type="module" src="/static/toggle.js"></script>
   <script type="module" src="/static/app.js"></script>

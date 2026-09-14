@@ -31,14 +31,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import soundfile as sf
 import srt as srt_lib
 
 from respeak.config import Settings
 from respeak.jobs import JobRunner, JobStore
-from respeak.pipeline import ffmpeg
+from respeak.pipeline import ffmpeg, inputs
+from respeak.pipeline import run as run_module
 from respeak.pipeline.audio import AssembleResult
 from respeak.pipeline.run import KEPT_FILES, OUTPUT_MP4, SUBS_SRT, assemble_warnings, run_job
 from respeak.pipeline.tts import TTSError
+from respeak.pipeline.types import Segment, Transcript, Voice
 
 ffmpeg.ensure_binaries()
 
@@ -177,6 +180,7 @@ def test_upload_job_runs_end_to_end(settings: Settings, store: JobStore) -> None
     assert status["detected_language"] == "en"
     assert status["title"] == "sample"  # the container carries no title, so the filename is used
     assert status["warnings"] == []  # nothing was cut off this dub
+    assert status["detail"] is None  # 3.1: the per-stage sentence is cleared when the job ends
 
     # B7: out.mp4, subs.srt and status.json — nothing else survives.
     assert {p.name for p in job_dir.iterdir()} == set(KEPT_FILES)
@@ -219,6 +223,247 @@ def test_burn_off_copies_the_video_stream(settings: Settings, store: JobStore) -
     # The subtitles are still there as a soft track, they are just not painted on.
     assert stream_of(out, "subtitle")["codec_name"] == "mov_text"
     assert len(cues_of(job_dir / SUBS_SRT)) >= 1
+
+
+# --------------------------------------------------------------------------------------------------
+# per-stage progress and detail (plan.md 3.1) — the real media path, fake models, so this always runs
+# --------------------------------------------------------------------------------------------------
+
+
+#: What the fake transcript claims is in `sample.mp4` (10.2 s of English).
+FAKE_SEGMENTS: tuple[tuple[float, float, str], ...] = (
+    (0.5, 3.0, "Respeak turns a video into another language."),
+    (3.5, 6.0, "It keeps the timing of the original speaker."),
+    (6.5, 9.5, "This clip exists so the tests have real speech."),
+)
+
+
+class FakeBackend:
+    """A TTS backend that writes a real 24 kHz clip per segment without loading a model."""
+
+    name = "fake"
+
+    def __init__(self, cloning: bool = False) -> None:
+        self.cloning = cloning
+        self.calls: list[tuple[str, str, Path | None, str | None]] = []
+        self.reference_audio: tuple[int, int, float] | None = None
+
+    def languages(self) -> set[str]:
+        return {"en", "es"}
+
+    def voices(self) -> dict[str, list[Voice]]:
+        return {}
+
+    def synthesize(
+        self, text: str, lang: str, reference_wav: Path | None, out: Path, voice: str | None = None
+    ) -> Path:
+        self.calls.append((text, lang, reference_wav, voice))
+        if reference_wav is not None and self.reference_audio is None:
+            with sf.SoundFile(str(reference_wav)) as handle:
+                self.reference_audio = (handle.samplerate, handle.channels, len(handle) / handle.samplerate)
+        ffmpeg.run(
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=330:sample_rate=24000:duration=1.2",
+                "-ac",
+                "1",
+                "-c:a",
+                "pcm_s16le",
+                str(out),
+            ]
+        )
+        return out
+
+
+class FakeTranslator:
+    """`ArgosTranslator` without Argos: the pipeline only needs 1:1 texts back."""
+
+    def ensure_pair(self, src: str, dst: str) -> None:
+        return None
+
+    def translate(self, texts: list[str], src: str, dst: str) -> list[str]:
+        return [f"en {dst}: {text}" for text in texts]
+
+
+def fake_models(monkeypatch: pytest.MonkeyPatch, backend: FakeBackend) -> None:
+    """Replace whisper, Argos and the TTS backend; every ffmpeg step stays real."""
+
+    def transcribe(wav: Path, language: str | None, settings: Settings, progress: Any = None) -> Transcript:
+        if progress is not None:
+            progress(0.5)
+            progress(1.0)
+        return Transcript(
+            language=language or "en",
+            segments=[Segment(start=s, end=e, text=t) for s, e, t in FAKE_SEGMENTS],
+        )
+
+    monkeypatch.setattr("respeak.pipeline.run.asr.transcribe", transcribe)
+    monkeypatch.setattr("respeak.pipeline.run.get_translator", lambda settings: FakeTranslator())
+    monkeypatch.setattr("respeak.pipeline.run.get_backend", lambda name, settings: backend)
+
+
+def record_status_writes(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Every `JobStore.update(**fields)` the pipeline makes, in order, still written to disk."""
+    written: list[dict[str, Any]] = []
+    real = JobStore.update
+
+    def spy(self: JobStore, job_id: str, **fields: Any) -> dict[str, Any]:
+        written.append(dict(fields))
+        return real(self, job_id, **fields)
+
+    monkeypatch.setattr(JobStore, "update", spy)
+    return written
+
+
+def test_every_stage_writes_a_detail_and_the_bar_only_moves_forward(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """3.1: `detail` names what is happening at least eight different times, `progress` never dips."""
+    backend = FakeBackend()
+    fake_models(monkeypatch, backend)
+    job_id = make_upload_job(store, voice="ef_dora")
+    written = record_status_writes(monkeypatch)
+
+    run_job(job_id, settings, store)
+
+    details = [fields["detail"] for fields in written if "detail" in fields]
+    spoken = {detail for detail in details if detail}
+    assert len(spoken) >= 8, sorted(spoken)
+    assert "checking the file" in spoken
+    assert "transcribing" in spoken
+    assert any(detail.startswith("transcribed ") and " of 0:10" in detail for detail in spoken), spoken
+    assert "translating 3 segments" in spoken
+    assert {"speaking segment 1 of 3", "speaking segment 2 of 3", "speaking segment 3 of 3"} <= spoken
+    assert "writing subtitles" in spoken
+    assert "encoding the video" in spoken
+    assert details[-1] is None, "the detail line must be cleared when the job finishes"
+
+    values = [fields["progress"] for fields in written if "progress" in fields]
+    assert values == sorted(values), values
+    assert values[0] <= 0.02 and values[-1] == 1.0
+    assert len(values) >= 10, values  # "the bar moves at least ten times between submit and done"
+
+    status = store.require(job_id)
+    assert (status["state"], status["detail"], status["progress"]) == ("done", None, 1.0)
+    # 3.3 wiring: whatever the form picked reaches every synthesize() call.
+    assert {voice for _, _, _, voice in backend.calls} == {"ef_dora"}
+    assert [reference for _, _, reference, _ in backend.calls] == [None] * 3  # this backend cannot clone
+
+
+def test_the_fetch_bar_keeps_talking_through_every_file_yt_dlp_downloads(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F3: yt-dlp downloads the video, then the audio, then merges — all through one writer.
+
+    The first file reaching 1.0 pins the bar at the top of the fetch range, so throttling on
+    "has the bar moved?" alone silently dropped every sentence after it and the page froze on
+    "downloading 7.4 MB of 7.4 MB" for the rest of the download.
+    """
+    job_id = make_upload_job(store)
+    written = record_status_writes(monkeypatch)
+    write = run_module._throttled_writer(store, job_id, "fetch")
+
+    hook: list[tuple[float, str]] = [
+        (0.5, "downloading 3.7 MB of 7.4 MB"),
+        (1.0, "downloading 7.4 MB of 7.4 MB"),
+        (1.0, "merging the download"),
+        (0.05, "downloading 0.1 MB of 1.1 MB"),  # the audio file starts over at nearly nothing
+        (0.5, "downloading 0.6 MB of 1.1 MB"),
+        (1.0, "downloading 1.1 MB of 1.1 MB"),
+        (1.0, "merging the download"),
+    ]
+    for fraction, detail in hook:
+        write(fraction, detail)
+
+    details = [fields["detail"] for fields in written if "detail" in fields]
+    assert set(details) == {detail for _, detail in hook}, details
+
+    values = [fields["progress"] for fields in written if "progress" in fields]
+    assert values == sorted(values), values  # the audio restarting at 0.05 must not rewind the bar
+    assert values[-1] == pytest.approx(run_module.STEP_RANGE["fetch"][1])
+    assert store.require(job_id)["detail"] == "merging the download"
+
+
+def test_the_bar_reaches_the_top_of_the_speak_and_mux_ranges(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F6: speak reported only `(i-1)/n`, so it handed over a whole segment short of its range,
+    and mux's closing `progress(1.0)` was thrown away by the throttle a fraction below 0.95."""
+    backend = FakeBackend()
+    fake_models(monkeypatch, backend)
+    job_id = make_upload_job(store)
+    written = record_status_writes(monkeypatch)
+
+    run_job(job_id, settings, store)
+
+    step: str | None = None
+    bar: list[tuple[str | None, float]] = []
+    for fields in written:
+        if "step" in fields:
+            step = fields["step"]
+        if "progress" in fields:
+            bar.append((step, fields["progress"]))
+
+    speak = [value for name, value in bar if name == "speak"]
+    assert speak, bar
+    assert speak[0] == pytest.approx(run_module.STEP_RANGE["speak"][0], abs=0.001)
+    assert speak[-1] == pytest.approx(0.75, abs=0.001), speak
+
+    mux = [value for name, value in bar if name == "mux"]
+    assert any(value == pytest.approx(0.95, abs=0.001) for value in mux), mux
+    assert [value for name, value in bar if name == "finish"][-1] == 1.0
+
+
+def test_a_cloning_backend_gets_a_reference_cut_from_the_transcript(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """3.7: `reference_from_segments` replaces the loudest-RMS clip — and only for cloning backends."""
+    backend = FakeBackend(cloning=True)
+    fake_models(monkeypatch, backend)
+    cuts: list[tuple[str, list[tuple[float, float]], str]] = []
+    real_cut = inputs.reference_from_segments
+
+    def spy(source_wav: Path, segments: Any, out: Path, *args: Any, **kwargs: Any) -> Path:
+        cuts.append(
+            (Path(source_wav).name, [(s.start, s.end) for s in segments], Path(out).name),
+        )
+        return real_cut(source_wav, segments, out, *args, **kwargs)
+
+    monkeypatch.setattr("respeak.pipeline.run.inputs.reference_from_segments", spy)
+    job_id = make_upload_job(store)
+
+    run_job(job_id, settings, store)
+
+    assert store.require(job_id)["state"] == "done"
+    assert len(cuts) == 1, "the reference is cut once per job, after transcription"
+    assert cuts[0][0] == "source.wav"  # the ASR wav, not the video
+    assert cuts[0][1] == [(start, end) for start, end, _ in FAKE_SEGMENTS]
+    assert cuts[0][2] == "reference.wav"
+    assert backend.reference_audio is not None
+    rate, channels, seconds = backend.reference_audio
+    assert (rate, channels) == (24_000, 1)
+    assert 0 < seconds <= inputs.REFERENCE_SECONDS + 0.05
+    assert {reference for _, _, reference, _ in backend.calls} == {store.path(job_id) / "reference.wav"}
+
+
+def test_a_backend_that_cannot_clone_never_pays_for_a_reference_cut(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = FakeBackend(cloning=False)
+    fake_models(monkeypatch, backend)
+    called: list[Path] = []
+    monkeypatch.setattr(
+        "respeak.pipeline.run.inputs.reference_from_segments",
+        lambda source_wav, segments, out, *a, **kw: called.append(Path(out)) or Path(out),
+    )
+    job_id = make_upload_job(store)
+
+    run_job(job_id, settings, store)
+
+    assert called == []
+    assert store.require(job_id)["state"] == "done"
 
 
 # --------------------------------------------------------------------------------------------------
@@ -288,7 +533,12 @@ class BoomBackend:
     def languages(self) -> set[str]:
         return {"es"}
 
-    def synthesize(self, text: str, lang: str, reference_wav: Path | None, out: Path) -> Path:
+    def voices(self) -> dict[str, list[Voice]]:
+        return {}
+
+    def synthesize(
+        self, text: str, lang: str, reference_wav: Path | None, out: Path, voice: str | None = None
+    ) -> Path:
         raise TTSError("kokoro ran out of voices")
 
 

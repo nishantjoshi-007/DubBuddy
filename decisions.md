@@ -291,6 +291,9 @@ pyproject.toml stays  it is what uv reads to lock and install dependencies (the 
 respeak/ stays        a folder Python imports; it has nothing to do with publishing
 ```
 
+**D-45 Phase 3 review findings** — Made (Claude)
+The D-42 review of Phase 3 found seven confirmed issues before the phase closed: `X-Forwarded-For` read from the client-controlled end (rate limit bypass behind a proxy), the Chatterbox `pkg_resources` shim leaking into jieba and breaking Kokoro Chinese in a fresh container, fetch progress freezing after yt-dlp's first file, failed jobs keeping a stale `detail`, an unbounded rate-limit table keyed by raw header text, the speak stage never reaching the top of its range, and oversize uploads charged a token. All fixed with a test each (FIX-3). Lesson recorded: any header a proxy *appends* to must be read from the right.
+
 **D-42 Review before closing a phase** — Made (Claude)
 After the Phase 1 work packages landed, a read-only reviewer agent examined the diff against flow.md Part B and the old system's defect list, confirming each finding by running it. It found ten issues the 127 tests did not: heavy imports reaching the event loop through `health`/`backends`/`resolved_device()`, the sweeper dying permanently on one bad status.json and able to delete a job running longer than 6 h, `fit()` stretching short clips by 25 %, dropped dub tails reported nowhere, `_pipeline_run_fn` swallowing every ImportError, VP9/Opus copied into `out.mp4`, the upload cap enforced only after Starlette spooled the body, yt-dlp's generic extractor reachable for internal URLs (SSRF), and blocking file I/O in an async route. All were fixed before the phase closed (FIX-1). Rule going forward: every phase ends with an independent review pass, and the reviewer must reproduce, not guess.
 
@@ -422,4 +425,5 @@ DATE        WHAT CHANGED
 2026-09-12  Phase 1: WP-A…F landed (127 tests), live acceptance passed (YouTube en→es 28 s, upload en→fr 18 s, queue verified), review D-42, fixes F1–F9
 2026-09-12  N-22 / D-43: clone-and-run only, no PyPI
 2026-09-13  N-24 / D-44: model roster closed (Kokoro + Chatterbox only), CLI in; Phase 3 started in full
+2026-09-13  Phase 3 delivered (WP-3A…3D), live acceptance passed, review D-45 → FIX-3; torchaudio pinned to the CPU index; no attribution trailers on commits (D-41)
 ```

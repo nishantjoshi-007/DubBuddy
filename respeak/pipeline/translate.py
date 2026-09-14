@@ -19,6 +19,21 @@ if TYPE_CHECKING:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
+
+def _quiet_argos_logging() -> None:
+    """Argos logs every sentence it translates at INFO on its own child loggers, which drowns CLI progress.
+
+    Levels set on a child logger win over the parent, so this must run after the import that creates them.
+    """
+    for name in (
+        "argostranslate",
+        "argostranslate.utils",
+        "argostranslate.translate",
+        "argostranslate.package",
+    ):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 PIVOT = "en"
 
 #: Serialises package-index updates and installs across worker threads (Argos' own lock does not cover the
@@ -150,6 +165,8 @@ class ArgosTranslator:
                 try:
                     from argostranslate import package as argos_package
 
+                    _quiet_argos_logging()
+
                     path = pkg.download()
                     argos_package.install_from_path(path)
                 except Exception as exc:
@@ -165,6 +182,8 @@ class ArgosTranslator:
             return
         from argostranslate import package as argos_package
 
+        _quiet_argos_logging()
+
         try:
             argos_package.update_package_index()
         except Exception as exc:  # pragma: no cover - argos already swallows most of these
@@ -175,6 +194,8 @@ class ArgosTranslator:
     def _installed_pairs() -> set[tuple[str, str]]:
         from argostranslate import package as argos_package
 
+        _quiet_argos_logging()
+
         return {
             (pkg.from_code, pkg.to_code)
             for pkg in argos_package.get_installed_packages()
@@ -184,6 +205,8 @@ class ArgosTranslator:
     @staticmethod
     def _available_packages() -> dict[tuple[str, str], object]:
         from argostranslate import package as argos_package
+
+        _quiet_argos_logging()
 
         try:
             packages = argos_package.get_available_packages()

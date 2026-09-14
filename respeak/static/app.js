@@ -37,6 +37,13 @@ const FALLBACK_NAMES = {
   vi: "Vietnamese",
 };
 
+const STATE_LABELS = {
+  queued: "Queued",
+  running: "Running",
+  done: "Done",
+  failed: "Failed",
+};
+
 const el = (id) => document.getElementById(id);
 
 const dom = {
@@ -53,6 +60,8 @@ const dom = {
   fromLang: el("from-lang"),
   backendField: el("backend-field"),
   backend: el("backend"),
+  voiceField: el("voice-field"),
+  voice: el("voice"),
   burn: el("burn-subtitles"),
   submit: el("submit-button"),
   formError: el("form-error"),
@@ -63,33 +72,24 @@ const dom = {
   progress: el("progress"),
   progressFill: el("progress-fill"),
   statusLine: el("status-line"),
+  jobDetail: el("job-detail"),
+  runCard: el("run-card"),
   stepList: el("step-list"),
+  jobWarnings: el("job-warnings"),
+  warningList: el("job-warning-list"),
   jobError: el("job-error"),
   output: el("output"),
   video: el("output-video"),
   download: el("download-link"),
+  donePair: el("done-pair"),
+  doneFile: el("done-file"),
 };
-
-// A notice (not an error): the job succeeded, but part of the dub did not fit the video.
-// Built here rather than in the template so the stylesheet stays the error panel's only owner.
-dom.jobWarnings = (() => {
-  const node = document.createElement("p");
-  node.id = "job-warnings";
-  node.className = "notice";
-  node.setAttribute("role", "status");
-  node.hidden = true;
-  node.style.cssText =
-    "margin:0;padding:0.7rem 0.9rem;border:1px solid var(--accent-color);" +
-    "border-radius:0.4rem;background:var(--background-color);color:var(--text-color);" +
-    "overflow-wrap:anywhere;";
-  dom.jobError.parentNode.insertBefore(node, dom.jobError);
-  return node;
-})();
 
 const state = {
   codeToName: Object.assign({}, FALLBACK_NAMES),
-  backends: [], // installed backends only: {name, languages: [...], cloning}
+  backends: [], // installed backends only: {name, languages, cloning, voices}
   jobId: "",
+  lastJob: null, // so the job view can be redrawn once the backend list arrives
   timer: null,
   polling: false,
   submitting: false,
@@ -181,6 +181,9 @@ async function loadBackends() {
       name: String(backend.name),
       languages: Array.isArray(backend.languages) ? backend.languages.map(String) : [],
       cloning: backend.cloning === true,
+      // {lang: [{id, name}]} — absent on a server that predates the voice picker, which simply
+      // means "no voice choice here" and leaves the select hidden.
+      voices: backend.voices && typeof backend.voices === "object" ? backend.voices : {},
     }));
 
   if (!state.backends.length) {
@@ -192,6 +195,9 @@ async function loadBackends() {
 
   fillBackends(typeof data.default === "string" ? data.default : "");
   fillTargetLanguages();
+  // A job page loaded straight from /jobs/<id> may already have drawn itself without language or
+  // voice names to hand; now that they are here, draw it again.
+  if (state.lastJob) renderJob(state.lastJob);
 }
 
 function fillSourceLanguages(sources) {
@@ -240,6 +246,7 @@ function fillTargetLanguages() {
     option.textContent = "No languages available";
     dom.toLang.appendChild(option);
     dom.toLang.disabled = true;
+    fillVoices();
     return;
   }
   dom.toLang.disabled = false;
@@ -252,6 +259,45 @@ function fillTargetLanguages() {
   const keep = entries.some((e) => e.code === previous) ? previous : "";
   const fallback = entries.some((e) => e.code === "es") ? "es" : entries[0].code;
   dom.toLang.value = keep || fallback;
+  fillVoices();
+}
+
+/** The voices the chosen backend offers for the chosen language (flow.md B6, Phase 3.3). */
+function voicesFor(backend, lang) {
+  if (!backend || !lang) return [];
+  const list = backend.voices ? backend.voices[lang] : null;
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((voice) => voice && voice.id)
+    .map((voice) => ({ id: String(voice.id), name: voice.name ? String(voice.name) : String(voice.id) }));
+}
+
+function fillVoices() {
+  const entries = voicesFor(selectedBackend(), dom.toLang.value);
+  const previous = dom.voice.value;
+
+  dom.voice.replaceChildren();
+  if (!entries.length) {
+    // A disabled control stays out of the FormData, so no `voice` is posted when there is no choice.
+    dom.voice.disabled = true;
+    show(dom.voiceField, false);
+    return;
+  }
+  for (const entry of entries) {
+    const option = document.createElement("option");
+    option.value = entry.id;
+    option.textContent = entry.name;
+    dom.voice.appendChild(option);
+  }
+  dom.voice.value = entries.some((e) => e.id === previous) ? previous : entries[0].id;
+  dom.voice.disabled = false;
+  show(dom.voiceField, true);
+}
+
+function voiceName(backendName, lang, id) {
+  const backend = state.backends.find((b) => b.name === backendName);
+  const hit = voicesFor(backend, lang).find((voice) => voice.id === String(id));
+  return hit ? hit.name : String(id);
 }
 
 // ---------------------------------------------------------------- source tabs
@@ -264,12 +310,24 @@ function selectSource(kind) {
   dom.tabUpload.classList.toggle("is-active", upload);
   dom.tabYoutube.setAttribute("aria-selected", String(!upload));
   dom.tabUpload.setAttribute("aria-selected", String(upload));
+  // Roving tabindex: one stop for the whole tablist, arrow keys move between the tabs.
+  dom.tabYoutube.tabIndex = upload ? -1 : 0;
+  dom.tabUpload.tabIndex = upload ? 0 : -1;
 
   show(dom.panelYoutube, !upload);
   show(dom.panelUpload, upload);
   // Disabled controls stay out of the FormData, so only the active source is ever sent.
   dom.url.disabled = upload;
   dom.file.disabled = !upload;
+}
+
+function onTabKey(event) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  if (dom.tabUpload.hidden) return; // only one tab to stand on
+  event.preventDefault();
+  const next = dom.sourceType.value === "upload" ? "youtube" : "upload";
+  selectSource(next);
+  (next === "upload" ? dom.tabUpload : dom.tabYoutube).focus();
 }
 
 // ---------------------------------------------------------------- submit
@@ -300,6 +358,7 @@ async function onSubmit(event) {
   // An unchecked checkbox is simply absent from a FormData, which would read as "use the default".
   body.set("burn_subtitles", dom.burn.checked ? "true" : "false");
   if (!body.get("from_lang")) body.delete("from_lang"); // "" means auto-detect (D-32)
+  if (!body.get("voice")) body.delete("voice"); // "" means the backend's own default (Phase 3.3)
   if (!upload) body.set("url", dom.url.value.trim());
 
   setSubmitting(true);
@@ -333,16 +392,23 @@ function buildSteps() {
   state.stepNodes.clear();
   for (const [key, label] of STEPS) {
     const item = document.createElement("li");
-    item.className = "step";
-    const marker = document.createElement("span");
-    marker.className = "step__marker";
-    marker.textContent = "·";
-    marker.setAttribute("aria-hidden", "true");
+    item.className = "rail__step";
+
+    const node = document.createElement("span");
+    node.className = "rail__node";
+    node.setAttribute("aria-hidden", "true");
+
     const text = document.createElement("span");
+    text.className = "rail__label";
     text.textContent = label;
-    item.append(marker, text);
+
+    // The rail is colour and shape; this says the same thing out loud.
+    const spoken = document.createElement("span");
+    spoken.className = "rail__sr";
+
+    item.append(node, text, spoken);
     dom.stepList.appendChild(item);
-    state.stepNodes.set(key, { item, marker });
+    state.stepNodes.set(key, { item, spoken });
   }
 }
 
@@ -357,18 +423,55 @@ function renderSteps(job) {
     node.item.classList.toggle("is-done", done && !failed);
     node.item.classList.toggle("is-current", isCurrent && !failed);
     node.item.classList.toggle("is-failed", failed);
-    node.marker.textContent = failed ? "×" : done ? "✓" : isCurrent ? "▸" : "·";
+    node.spoken.textContent = failed
+      ? " — stopped here"
+      : done
+        ? " — done"
+        : isCurrent
+          ? " — in progress"
+          : " — waiting";
   });
 }
 
-function renderMeta(job) {
-  const bits = [];
-  if (job.id) bits.push(`Job ${job.id}`);
-  if (job.detected_language) bits.push(`Detected language: ${languageName(job.detected_language)}`);
+function fact(key, value, modifier) {
+  const wrap = document.createElement("div");
+  wrap.className = "fact";
+  const term = document.createElement("dt");
+  term.className = "fact__k";
+  term.textContent = key;
+  const description = document.createElement("dd");
+  description.className = modifier ? `fact__v ${modifier}` : "fact__v";
+  description.textContent = value;
+  wrap.append(term, description);
+  return wrap;
+}
+
+/** The language pair, labelled honestly: the source is not known until transcribe has run. */
+function languagePair(job) {
   const options = job.options || {};
-  if (options.to_lang) bits.push(`Dubbing into ${languageName(options.to_lang)}`);
-  if (options.backend) bits.push(`Voice: ${titleCase(options.backend)}`);
-  setText(dom.jobMeta, bits.join(" · "));
+  const from = job.detected_language || options.from_lang;
+  const into = languageName(options.to_lang) || "the target language";
+  if (from) return { label: "Languages", value: `${languageName(from)} → ${into}` };
+  if (job.state === "queued" || job.state === "running") {
+    return { label: "Languages", value: `Listening → ${into}` };
+  }
+  return { label: "Dubbing into", value: into };
+}
+
+function renderMeta(job) {
+  const options = job.options || {};
+  const pair = languagePair(job);
+  const facts = [fact(pair.label, pair.value)];
+
+  // A backend's voice name may already carry its own parenthesis ("Dora (female)"), so the engine
+  // gets a column of its own rather than a second pair of brackets around it.
+  if (options.voice) facts.push(fact("Voice", voiceName(options.backend, options.to_lang, options.voice)));
+  if (options.backend) facts.push(fact("Engine", titleCase(String(options.backend))));
+  if (typeof options.burn_subtitles === "boolean") {
+    facts.push(fact("Subtitles", options.burn_subtitles ? "Burned in" : "Separate track"));
+  }
+  if (job.id) facts.push(fact("Job", String(job.id), "fact__v--id"));
+  dom.jobMeta.replaceChildren(...facts);
 }
 
 function renderProgress(job) {
@@ -381,9 +484,14 @@ function renderProgress(job) {
   const stepLabel = (STEPS.find(([key]) => key === job.step) || [null, job.step])[1];
   if (job.state === "failed")
     setText(dom.statusLine, stepLabel ? `Stopped during "${stepLabel}".` : "The job stopped before it started.");
-  else if (job.state === "done") setText(dom.statusLine, "Finished. The dubbed video is ready below.");
+  else if (job.state === "done") setText(dom.statusLine, "Finished. Your video is below.");
   else if (job.state === "queued") setText(dom.statusLine, "Queued — waiting for a free worker.");
-  else setText(dom.statusLine, `${stepLabel || "Working"}… ${percent}%`);
+  else setText(dom.statusLine, `${stepLabel || "Working"} — ${percent}%`);
+
+  // `detail` is the stage's own running commentary: "segment 4 of 12" (flow.md B5, Phase 3.1).
+  const detail = typeof job.detail === "string" ? job.detail.trim() : "";
+  setText(dom.jobDetail, detail);
+  show(dom.jobDetail, detail !== "" && job.state !== "done");
 }
 
 /** Warnings are things the user should know about a job that still worked (e.g. a cut-off tail). */
@@ -391,20 +499,62 @@ function renderWarnings(job) {
   const messages = Array.isArray(job.warnings)
     ? job.warnings.filter((item) => typeof item === "string" && item.trim())
     : [];
-  setText(dom.jobWarnings, messages.join(" "));
+  dom.warningList.replaceChildren(
+    ...messages.map((message) => {
+      const item = document.createElement("li");
+      item.textContent = message.trim();
+      return item;
+    })
+  );
+  dom.warningList.classList.toggle("is-single", messages.length === 1);
   show(dom.jobWarnings, messages.length > 0);
 }
 
+/** Mirrors `safe_name` in respeak/api.py so the page shows the name the file will be saved under. */
+function safeName(raw) {
+  if (!raw) return "";
+  const cleaned = String(raw)
+    .replace(/[^\p{L}\p{N}_.\- ]+/gu, "_")
+    .replace(/^[ ._]+/, "")
+    .replace(/[ ._]+$/, "");
+  return cleaned.slice(0, 120);
+}
+
+function outputFileName(job) {
+  const source = job.source || {};
+  const title = safeName(job.title) || safeName(source.filename) || String(job.id || state.jobId);
+  const target = (job.options || {}).to_lang || "dub";
+  return `${title}-${target}.mp4`;
+}
+
+function renderDone(job) {
+  const url = job.download_url || `/api/jobs/${encodeURIComponent(job.id || state.jobId)}/download`;
+  if (dom.video.getAttribute("src") !== url) dom.video.setAttribute("src", url);
+  const name = outputFileName(job);
+  dom.download.setAttribute("href", url);
+  dom.download.setAttribute("download", name);
+  setText(dom.donePair, languagePair(job).value);
+  setText(dom.doneFile, name);
+  show(dom.output, true);
+}
+
 function renderJob(job) {
+  state.lastJob = job;
+  const jobState = job.state || "queued";
+
   setText(dom.jobTitle, job.title || "Dubbing your video");
-  setText(dom.jobState, job.state || "queued");
-  dom.jobState.dataset.state = job.state || "queued";
+  setText(dom.jobState, STATE_LABELS[jobState] || jobState);
+  dom.jobState.dataset.state = jobState;
+  document.title = job.title ? `${job.title} — Respeak` : "Respeak";
   renderMeta(job);
   renderProgress(job);
   renderSteps(job);
   renderWarnings(job);
+  // Once it is finished the machinery has nothing left to say, so the page gets out of the way and
+  // the video comes straight after the facts. A failed job keeps the rail: it shows where it stopped.
+  show(dom.runCard, jobState !== "done");
 
-  if (job.state === "failed") {
+  if (jobState === "failed") {
     stopPolling();
     setText(dom.jobError, job.error || "The job failed without a message.");
     show(dom.jobError, true);
@@ -412,12 +562,9 @@ function renderJob(job) {
   }
   show(dom.jobError, false);
 
-  if (job.state === "done") {
+  if (jobState === "done") {
     stopPolling();
-    const url = job.download_url || `/api/jobs/${encodeURIComponent(job.id || state.jobId)}/download`;
-    if (dom.video.getAttribute("src") !== url) dom.video.setAttribute("src", url);
-    dom.download.setAttribute("href", url);
-    show(dom.output, true);
+    renderDone(job);
   }
 }
 
@@ -474,7 +621,10 @@ async function poll() {
 buildSteps();
 dom.tabYoutube.addEventListener("click", () => selectSource("youtube"));
 dom.tabUpload.addEventListener("click", () => selectSource("upload"));
+dom.tabYoutube.addEventListener("keydown", onTabKey);
+dom.tabUpload.addEventListener("keydown", onTabKey);
 dom.backend.addEventListener("change", fillTargetLanguages);
+dom.toLang.addEventListener("change", fillVoices);
 dom.form.addEventListener("submit", onSubmit);
 window.addEventListener("popstate", () => window.location.reload());
 

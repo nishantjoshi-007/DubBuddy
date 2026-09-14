@@ -8,8 +8,10 @@ here that a user should see: exceptions propagate, and the job ends `failed` wit
     probe .02 → fetch .10 → transcribe .30 → translate .40 → speak .60 → fit .75
               → subtitles .80 → mux .95 → finish 1.0
 
-Long stages (transcribe, speak) push a fraction into the range between their own progress value and the
-next stage's, so the bar keeps moving inside them.
+Long stages move the bar inside their own range instead of sitting still (plan.md 3.1): fetch .02–.10,
+transcribe .30–.40, speak .60–.75, mux .80–.95 — see `STEP_RANGE`. Every stage also writes
+`status.detail`, one short sentence saying what is happening right now ("downloading 3.1 MB of 7.4 MB",
+"speaking segment 3 of 12"); it is cleared when the job finishes.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from respeak.jobs import JobStore
 from respeak.pipeline import asr, audio, ffmpeg, inputs, mux, subtitles
 from respeak.pipeline.translate import ArgosTranslator, Translator, normalize_code
 from respeak.pipeline.tts import get_backend
+from respeak.pipeline.tts.base import TTSBackend
 from respeak.pipeline.types import Cue, Placed, Probe, Segment
 
 log = logging.getLogger(__name__)
@@ -71,6 +74,16 @@ STEP_PROGRESS: dict[str, float] = {
     "finish": 1.0,
 }
 
+#: The stages that report progress while they work: (bar on entry, bar when they hand over).
+#: `STEP_PROGRESS` stays the handover value; fetch and mux start their range at the value the stage
+#: before them left behind, so the bar creeps through a download or an encode instead of jumping.
+STEP_RANGE: dict[str, tuple[float, float]] = {
+    "fetch": (0.02, 0.10),
+    "transcribe": (0.30, 0.40),
+    "speak": (0.60, 0.75),
+    "mux": (0.80, 0.95),
+}
+
 #: Smallest progress change worth an fsync'd write of status.json.
 PROGRESS_STEP = 0.01
 
@@ -113,31 +126,39 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
     status = store.require(job_id)
     source: dict[str, Any] = dict(status.get("source") or {})
     options: dict[str, Any] = dict(status.get("options") or {})
+    is_youtube = source.get("type") == "youtube"
     timings: dict[str, float] = {}
     started = time.monotonic()
     log.info("job %s starting: %s → %s", job_id, source.get("type"), options.get("to_lang"))
 
     # -- probe ------------------------------------------------------------------------------------
-    with _stage(store, job_id, "probe", timings):
+    with _stage(store, job_id, "probe", timings, "probing the URL" if is_youtube else "checking the file"):
         to_lang = _target_language(options)
         from_lang = _source_language(options, to_lang)
         burn = bool(options.get("burn_subtitles", True))
         backend_name = str(options.get("backend") or settings.tts_backend)
+        voice = _voice(options)
         probe = _probe(source, job_dir, settings)
         title = probe.title or _fallback_title(source)
         if title:
             store.update(job_id, title=title)
 
     # -- fetch ------------------------------------------------------------------------------------
-    with _stage(store, job_id, "fetch", timings):
-        source_mp4 = _fetch(source, job_dir, settings)
+    with _stage(store, job_id, "fetch", timings, "downloading" if is_youtube else "reading the upload"):
+        source_mp4 = _fetch(source, job_dir, settings, _fetch_reporter(store, job_id))
+        _report(store, job_id, "fetch", 1.0, "extracting the audio")
         source_wav, reference_wav = inputs.extract_audio(source_mp4, job_dir)
         video_seconds = _video_seconds(source_mp4, probe)
 
     # -- transcribe -------------------------------------------------------------------------------
-    with _stage(store, job_id, "transcribe", timings):
+    with _stage(store, job_id, "transcribe", timings, "transcribing"):
         transcript = asr.transcribe(
-            source_wav, from_lang, settings, progress=_progress_reporter(store, job_id, "transcribe")
+            source_wav,
+            from_lang,
+            settings,
+            progress=_progress_reporter(
+                store, job_id, "transcribe", _clock_detail("transcribed", video_seconds)
+            ),
         )
         detected = normalize_code(transcript.language)
         store.update(job_id, detected_language=detected)
@@ -150,26 +171,29 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
         log.info("job %s: %d segments, %s detected", job_id, len(segments), detected)
 
     # -- translate --------------------------------------------------------------------------------
-    with _stage(store, job_id, "translate", timings):
+    with _stage(store, job_id, "translate", timings, _plural("translating", len(segments), "segment")):
         translator = get_translator(settings)
         translator.ensure_pair(detected, to_lang)
         texts = translator.translate([segment.text for segment in segments], detected, to_lang)
         spoken = _translated_segments(segments, texts)
 
     # -- speak ------------------------------------------------------------------------------------
-    with _stage(store, job_id, "speak", timings):
+    with _stage(store, job_id, "speak", timings, "preparing the voice"):
         backend = get_backend(backend_name, settings)
-        reference = reference_wav if backend.cloning else None
-        report = _progress_reporter(store, job_id, "speak")
+        reference = _reference(store, job_id, backend, source_wav, segments, reference_wav, job_dir)
+        total = len(spoken)
         clips: list[Path] = []
         for index, segment in enumerate(spoken, start=1):
+            # Before and after each sentence: the bar would otherwise stop one segment short of the
+            # top of the speak range and jump, and on a one-segment job it would never move at all.
+            _report(store, job_id, "speak", (index - 1) / total, f"speaking segment {index} of {total}")
             clip = job_dir / f"seg_{index:04d}.wav"
-            backend.synthesize(segment.text, to_lang, reference, clip)
+            backend.synthesize(segment.text, to_lang, reference, clip, voice=voice)
             clips.append(clip)
-            report(index / len(spoken))
+            _report(store, job_id, "speak", index / total)
 
     # -- fit --------------------------------------------------------------------------------------
-    with _stage(store, job_id, "fit", timings):
+    with _stage(store, job_id, "fit", timings, "fitting the audio to the video"):
         fitted: list[tuple[Path, float]] = []
         for index, (segment, clip) in enumerate(zip(spoken, clips, strict=True), start=1):
             slot = max(segment.end - segment.start, MIN_SLOT_SECONDS)
@@ -183,19 +207,27 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
             store.update(job_id, warnings=warnings)
 
     # -- subtitles --------------------------------------------------------------------------------
-    with _stage(store, job_id, "subtitles", timings):
+    with _stage(store, job_id, "subtitles", timings, "writing subtitles"):
         subs_srt = subtitles.build_srt(_cues(placed), job_dir / SUBS_SRT)
 
     # -- mux --------------------------------------------------------------------------------------
-    with _stage(store, job_id, "mux", timings):
-        out_mp4 = mux.mux(source_mp4, dubbed_wav, subs_srt, burn, to_lang, job_dir / OUTPUT_MP4)
+    with _stage(store, job_id, "mux", timings, "encoding the video"):
+        out_mp4 = mux.mux(
+            source_mp4,
+            dubbed_wav,
+            subs_srt,
+            burn,
+            to_lang,
+            job_dir / OUTPUT_MP4,
+            progress=_progress_reporter(store, job_id, "mux", _clock_detail("encoding", video_seconds)),
+        )
         if not out_mp4.is_file() or out_mp4.stat().st_size == 0:
             raise PipelineError(f"ffmpeg wrote no output for job {job_id}")
 
     # -- finish -----------------------------------------------------------------------------------
-    with _stage(store, job_id, "finish", timings):
+    with _stage(store, job_id, "finish", timings, "tidying up"):
         cleanup(job_dir)
-        store.update(job_id, state="done", output=OUTPUT_MP4, progress=1.0, error=None)
+        store.update(job_id, state="done", output=OUTPUT_MP4, progress=1.0, error=None, detail=None)
 
     log.info(
         "job %s done in %.1f s (%s)",
@@ -222,15 +254,43 @@ def _probe(source: dict[str, Any], job_dir: Path, settings: Settings) -> Probe:
     raise PipelineError(f"unknown source type {kind!r}; expected 'youtube' or 'upload'")
 
 
-def _fetch(source: dict[str, Any], job_dir: Path, settings: Settings) -> Path:
+def _fetch(
+    source: dict[str, Any],
+    job_dir: Path,
+    settings: Settings,
+    progress: inputs.DownloadProgress | None = None,
+) -> Path:
     """B4.2: either source type ends as `<jobdir>/source.mp4`."""
     kind = source.get("type")
     if kind == "youtube":
-        return inputs.fetch_youtube(_require_url(source), job_dir, settings)
+        return inputs.fetch_youtube(_require_url(source), job_dir, settings, progress)
     upload = job_dir / UPLOAD_FILENAME
     if not upload.is_file():
         raise PipelineError(f"the uploaded file is missing from {job_dir}")
     return inputs.remux(upload, job_dir / SOURCE_MP4)
+
+
+def _reference(
+    store: JobStore,
+    job_id: str,
+    backend: TTSBackend,
+    source_wav: Path,
+    segments: list[Segment],
+    fallback: Path,
+    job_dir: Path,
+) -> Path | None:
+    """The speaker clip for a cloning backend: the busiest 30 s of speech (plan.md 3.7), else None.
+
+    Backends that do not clone get None and the cut is skipped, which saves the second it costs.
+    Without segments — which `run_job` never allows this far — the loudest-window clip from
+    `extract_audio` stands in.
+    """
+    if not backend.cloning:
+        return None
+    if not segments:
+        return fallback
+    store.update(job_id, detail="picking a reference clip")
+    return inputs.reference_from_segments(source_wav, segments, job_dir / REFERENCE_WAV)
 
 
 def cleanup(job_dir: Path) -> list[str]:
@@ -258,9 +318,18 @@ def cleanup(job_dir: Path) -> list[str]:
 
 
 @contextmanager
-def _stage(store: JobStore, job_id: str, step: str, timings: dict[str, float]) -> Iterator[None]:
-    """Mark the step *before* the work (so a failure is named right) and log what it cost."""
-    store.mark(job_id, "running", step=step, progress=STEP_PROGRESS[step])
+def _stage(
+    store: JobStore,
+    job_id: str,
+    step: str,
+    timings: dict[str, float],
+    detail: str | None = None,
+) -> Iterator[None]:
+    """Mark the step *before* the work (so a failure is named right) and log what it cost.
+
+    One write carries the state, the step, the bar's value on entry and the sentence for the step.
+    """
+    store.update(job_id, state="running", step=step, progress=_step_range(step)[0], detail=detail)
     start = time.monotonic()
     try:
         yield
@@ -269,20 +338,105 @@ def _stage(store: JobStore, job_id: str, step: str, timings: dict[str, float]) -
         log.info("job %s: %s took %.2f s", job_id, step, timings[step])
 
 
-def _progress_reporter(store: JobStore, job_id: str, step: str) -> Callable[[float], None]:
-    """A 0–1 callback that moves the bar between this step's value and the next one's."""
-    start = STEP_PROGRESS[step]
-    end = STEP_PROGRESS[STEPS[STEPS.index(step) + 1]]
-    state = {"last": start}
+def _step_range(step: str) -> tuple[float, float]:
+    """(bar on entry, bar on handover) for a step — the same number twice for the quick ones."""
+    if step in STEP_RANGE:
+        return STEP_RANGE[step]
+    return STEP_PROGRESS[step], STEP_PROGRESS[step]
 
-    def report(fraction: float) -> None:
-        value = start + (end - start) * min(1.0, max(0.0, float(fraction)))
-        if value - state["last"] < PROGRESS_STEP:  # one fsync per percent, not per segment
+
+def _interpolate(step: str, fraction: float) -> float:
+    """Where the bar sits `fraction` of the way through `step`."""
+    start, end = _step_range(step)
+    return start + (end - start) * min(1.0, max(0.0, float(fraction)))
+
+
+def _report(store: JobStore, job_id: str, step: str, fraction: float, detail: str | None = None) -> None:
+    """Write the bar (and, when given, the sentence) for a step that counts its own work."""
+    fields: dict[str, Any] = {"progress": round(_interpolate(step, fraction), 3)}
+    if detail is not None:
+        fields["detail"] = detail
+    store.update(job_id, **fields)
+
+
+def _throttled_writer(store: JobStore, job_id: str, step: str) -> Callable[[float, str | None], None]:
+    """Writes the bar (and a sentence) for a step, at most once per percent of the whole job.
+
+    Three rules beyond the percent, all of them there because one stage (fetch) reports several
+    files through one writer — yt-dlp counts the video 0→1, then the audio 0→1, then the merge:
+
+    * a *changed sentence* is always written, even when the bar cannot move. Otherwise the page
+      freezes on "downloading 7.4 MB of 7.4 MB" for the whole second file and the whole merge.
+    * the bar never goes **backwards**: the second file restarting at 0.05 must not undo the first.
+    * a *final* write (fraction 1.0, the end of a range) is never throttled, so `mux` really does
+      land on 0.95 before `finish` rather than a percent short of it.
+    """
+    state: dict[str, Any] = {"last": _step_range(step)[0], "detail": None}
+
+    def write(fraction: float, detail: str | None) -> None:
+        last = float(state["last"])
+        value = max(last, _interpolate(step, fraction))
+        moved = value - last >= PROGRESS_STEP
+        spoke = detail is not None and detail != state["detail"]
+        topped = fraction >= 1.0 and value > last  # the end of the range, not written yet
+        if not (moved or spoke or topped):  # one fsync per percent, not per callback
             return
         state["last"] = value
-        store.update(job_id, progress=round(value, 3))
+        fields: dict[str, Any] = {"progress": round(value, 3)}
+        if detail is not None:
+            fields["detail"] = detail
+            state["detail"] = detail
+        store.update(job_id, **fields)
+
+    return write
+
+
+def _progress_reporter(
+    store: JobStore,
+    job_id: str,
+    step: str,
+    detail: Callable[[float], str] | None = None,
+) -> Callable[[float], None]:
+    """A 0–1 callback that moves the bar inside this step's range, with an optional detail line."""
+    write = _throttled_writer(store, job_id, step)
+
+    def report(fraction: float) -> None:
+        clamped = min(1.0, max(0.0, float(fraction)))
+        write(clamped, detail(clamped) if detail is not None else None)
 
     return report
+
+
+def _fetch_reporter(store: JobStore, job_id: str) -> inputs.DownloadProgress:
+    """yt-dlp's (fraction, sentence) hook → the bar inside the fetch range, throttled the same way."""
+    write = _throttled_writer(store, job_id, "fetch")
+
+    def report(fraction: float, detail: str) -> None:
+        write(fraction, detail)
+
+    return report
+
+
+def _clock_detail(verb: str, total_seconds: float) -> Callable[[float], str]:
+    """'transcribed 0:42 of 2:10' from a 0–1 fraction of `total_seconds`."""
+
+    def detail(fraction: float) -> str:
+        return f"{verb} {_clock(fraction * total_seconds)} of {_clock(total_seconds)}"
+
+    return detail
+
+
+def _clock(seconds: float) -> str:
+    """63.4 → '1:03'; 3723 → '1:02:03'."""
+    whole = max(0, int(seconds))
+    hours, rest = divmod(whole, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def _plural(verb: str, count: int, noun: str) -> str:
+    """'translating 12 segments' / 'translating 1 segment'."""
+    return f"{verb} {count} {noun}{'' if count == 1 else 's'}"
 
 
 def _target_language(options: dict[str, Any]) -> str:
@@ -300,6 +454,15 @@ def _source_language(options: dict[str, Any], to_lang: str) -> str | None:
     from_lang = normalize_code(str(raw))
     _check_pair(from_lang, to_lang)
     return from_lang
+
+
+def _voice(options: dict[str, Any]) -> str | None:
+    """The voice id picked in the form, or None for the backend's default (flow.md B5, plan.md 3.3)."""
+    raw = options.get("voice")
+    if raw is None:
+        return None
+    voice = str(raw).strip()
+    return voice or None
 
 
 def _check_pair(src: str, dst: str) -> None:
@@ -373,6 +536,7 @@ __all__ = [
     "OUTPUT_MP4",
     "STEPS",
     "STEP_PROGRESS",
+    "STEP_RANGE",
     "SUBS_SRT",
     "PipelineError",
     "assemble_warnings",

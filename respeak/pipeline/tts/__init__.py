@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 
 from ...config import Settings
-from ..types import BackendInfo
+from ..types import BackendInfo, Voice
 from .base import TTSBackend
 
 if TYPE_CHECKING:  # concrete types for the registry only; never imported at runtime from here
@@ -90,12 +90,28 @@ def _construct(name: str, settings: Settings) -> KokoroBackend | ChatterboxBacke
     raise TTSError(f"unknown backend {name!r}; known backends: {', '.join(BACKEND_NAMES)}")
 
 
+def _voices_of(backend: TTSBackend) -> dict[str, list[Voice]]:
+    """`backend.voices()`, or `{}` when that backend cannot answer (plan.md 3.3).
+
+    `available_backends()` is behind a route the page loads on every visit, and a backend that
+    offers no voices is an ordinary state (Chatterbox clones instead). One backend whose voice
+    table is broken therefore degrades to "no preset voices" and a loud log line, rather than
+    taking `GET /api/backends` — and with it the whole form — down with it.
+    """
+    try:
+        return backend.voices()
+    except Exception:
+        log.exception("backend %r could not list its voices; offering none", getattr(backend, "name", "?"))
+        return {}
+
+
 def available_backends(settings: Settings) -> dict[str, BackendInfo]:
     """Describe every backend Respeak knows about, installed or not (flow.md B4.5, D-24).
 
     `installed` is what the UI gates the backend selector on; `reason` says what to run when a
     backend is missing. `languages` is always the full set the backend speaks, so the UI can tell
-    a user which languages an extra would unlock.
+    a user which languages an extra would unlock. `voices` is the Phase 3 picker: `{lang: [Voice]}`,
+    empty for a backend that clones the original speaker.
     """
     infos: dict[str, BackendInfo] = {}
     for name in BACKEND_NAMES:
@@ -107,6 +123,7 @@ def available_backends(settings: Settings) -> dict[str, BackendInfo]:
             languages=backend.languages(),
             cloning=backend.cloning,
             reason=None if installed else backend.reason(),
+            voices=_voices_of(backend),
         )
     return infos
 

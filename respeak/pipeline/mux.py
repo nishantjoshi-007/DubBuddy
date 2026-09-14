@@ -10,6 +10,7 @@ checkbox is on, and always attach a soft `mov_text` track).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from respeak.lang_codes import ISO639_2
@@ -23,6 +24,9 @@ FORCE_STYLE = "FontName=Noto Sans,Outline=1,MarginV=30"
 UNDETERMINED = "und"
 """ISO-639-2 for "language not known" — what an unmapped code becomes."""
 
+ProgressCallback = Callable[[float], None]
+"""Called with how much of the output is written, 0–1; always called once with 1.0 at the end."""
+
 
 def mux(
     source_mp4: Path | str,
@@ -31,8 +35,14 @@ def mux(
     burn: bool,
     lang: str,
     out: Path | str,
+    *,
+    progress: ProgressCallback | None = None,
 ) -> Path:
-    """Mux video + dubbed audio (+ subtitles) into `out` and return it."""
+    """Mux video + dubbed audio (+ subtitles) into `out` and return it.
+
+    With `progress`, ffmpeg is run with `-progress pipe:1` and the callback follows `out_time`
+    through the encode (plan.md 3.1); without it the call is the plain, silent one it always was.
+    """
     source = Path(source_mp4)
     audio = Path(dubbed_wav)
     subs = Path(subs_srt) if subs_srt is not None else None
@@ -58,18 +68,37 @@ def mux(
         # (a VP9/Opus WebM, say) into h264 + aac before the pipeline gets here.
         args += ["-map", "0:v:0", "-c:v", "copy"]
     args += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "160k"]
+    # The length of the output: what `-shortest` would pick, and what a progress fraction divides by.
+    output_seconds = 0.0
+    if subs is not None or progress is not None:
+        output_seconds = min(ffmpeg.duration(source), ffmpeg.duration(audio))
     if subs is None:
         args += ["-shortest"]
     else:
         # `-shortest` counts the subtitle track too, and the last cue normally ends before the video
         # does — it would cut the film off mid-scene. Cap the output explicitly instead.
         args += ["-map", "2:s:0", "-c:s", "mov_text", "-metadata:s:s:0", f"language={iso639_2(lang)}"]
-        args += ["-t", f"{min(ffmpeg.duration(source), ffmpeg.duration(audio)):.3f}"]
+        args += ["-t", f"{output_seconds:.3f}"]
     args += ["-movflags", "+faststart", str(dest)]
 
     log.info("muxing %s (burn=%s, lang=%s) → %s", source.name, burn, lang, dest.name)
-    ffmpeg.run(args)
+    if progress is None:
+        ffmpeg.run(args)
+    else:
+        ffmpeg.run_progress(args, _fraction_of(output_seconds, progress))
+        progress(1.0)  # a stream copy can finish before ffmpeg prints a single progress block
     return dest
+
+
+def _fraction_of(output_seconds: float, progress: ProgressCallback) -> ffmpeg.SecondsCallback:
+    """Turn ffmpeg's `out_time` in seconds into the 0–1 fraction of the output it represents."""
+
+    def report(seconds: float) -> None:
+        if output_seconds <= 0:
+            return
+        progress(min(1.0, max(0.0, seconds / output_seconds)))
+
+    return report
 
 
 def iso639_2(lang: str) -> str:

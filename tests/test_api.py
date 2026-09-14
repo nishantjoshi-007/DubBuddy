@@ -52,10 +52,14 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("MAX_UPLOAD_MB", "1")
     monkeypatch.setenv("MAX_CONCURRENT_JOBS", "2")
     monkeypatch.setenv("JOB_TTL_MINUTES", "60")
+    monkeypatch.setenv("RATE_LIMIT_JOBS", "")
+    monkeypatch.setenv("TRUST_PROXY", "false")
     get_settings.cache_clear()
     jobs_module.reset_state()
+    api_module.reset_rate_limiter()  # the token buckets are process-wide; no test inherits another's
     yield get_settings()
     jobs_module.reset_state()
+    api_module.reset_rate_limiter()
     get_settings.cache_clear()
 
 
@@ -128,6 +132,7 @@ def test_youtube_job_is_created_queued_and_submitted(
         "to_lang": "es",
         "from_lang": "en",
         "backend": "kokoro",
+        "voice": None,  # no voice picked: the backend uses its curated default (plan.md 3.3)
         "burn_subtitles": True,
     }
     assert parse_iso(status["created_at"]) <= parse_iso(status["updated_at"])
@@ -296,6 +301,229 @@ def test_oversize_upload_is_413_and_removes_the_job_dir(
     assert runner.submitted == []
 
 
+# --------------------------------------------------------------------------- 3.3 voice picker
+
+
+def test_backends_publishes_a_voice_table_per_language(client: TestClient) -> None:
+    """The form fills its voice select straight from this (flow.md B6, plan.md 3.3)."""
+    backends = {entry["name"]: entry for entry in client.get("/api/backends").json()["backends"]}
+    kokoro = backends["kokoro"]["voices"]
+    assert set(kokoro) <= set(backends["kokoro"]["languages"])
+    assert kokoro["es"][0] == {"id": "ef_dora", "name": "Dora (female)"}
+    assert all({"id", "name"} == set(voice) for voices in kokoro.values() for voice in voices)
+    assert backends["chatterbox"]["voices"] == {}, "a cloning backend hides the select"
+
+
+def test_a_picked_voice_is_stored_in_the_options(client: TestClient, settings: Settings) -> None:
+    response = client.post("/jobs", data={**YOUTUBE_FORM, "voice": "em_alex"})
+    assert response.status_code == 201, response.text
+    assert read_status(settings, response.json()["id"])["options"]["voice"] == "em_alex"
+
+
+def test_an_empty_voice_field_means_the_backend_default(client: TestClient, settings: Settings) -> None:
+    """The form always posts the field; blank must mean "default", not "no such voice"."""
+    response = client.post("/jobs", data={**YOUTUBE_FORM, "voice": ""})
+    assert response.status_code == 201, response.text
+    assert read_status(settings, response.json()["id"])["options"]["voice"] is None
+
+
+@pytest.mark.parametrize("voice", ["bogus", "am_adam"])  # unknown, and one from another language
+def test_a_voice_the_backend_cannot_use_is_400_with_the_list(
+    client: TestClient, settings: Settings, runner: StubRunner, voice: str
+) -> None:
+    response = client.post("/jobs", data={**YOUTUBE_FORM, "voice": voice})
+    assert response.status_code == 400, response.text
+    error = response.json()["error"]
+    assert voice in error and "ef_dora" in error
+    assert runner.submitted == []
+    assert store_for(settings).list_ids() == []
+
+
+def test_a_voice_for_a_backend_that_has_none_is_refused(client: TestClient, settings: Settings) -> None:
+    chatterbox = available_backends(settings)["chatterbox"]
+    if not chatterbox.installed:
+        pytest.skip("the `clone` extra is not installed here")
+    response = client.post("/jobs", data={**YOUTUBE_FORM, "backend": "chatterbox", "voice": "ef_dora"})
+    assert response.status_code == 400
+    assert "no preset voices" in response.json()["error"]
+
+
+# --------------------------------------------------------------------------- 3.5 rate limiting
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("", None),
+        ("   ", None),
+        ("10/hour", (10, 3600.0)),
+        ("3/minute", (3, 60.0)),
+        ("100/day", (100, 86400.0)),
+        ("30/second", (30, 1.0)),
+        (" 5 / 2 HOURS ", (5, 7200.0)),
+    ],
+)
+def test_parse_rate_limit_reads_the_documented_forms(raw: str, expected: tuple[int, float] | None) -> None:
+    assert api_module.parse_rate_limit(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["10", "ten/hour", "10/fortnight", "0/hour", "10 per hour", "/hour"])
+def test_a_misspelt_rate_limit_raises_instead_of_silently_disabling_itself(raw: str) -> None:
+    with pytest.raises(ValueError):
+        api_module.parse_rate_limit(raw)
+
+
+def test_the_bucket_starts_full_empties_and_refills() -> None:
+    limiter = api_module.RateLimiter(api_module.RateLimit(count=3, seconds=60.0))
+    assert [limiter.check("1.2.3.4", now=0.0) for _ in range(3)] == [0.0, 0.0, 0.0]
+    wait = limiter.check("1.2.3.4", now=0.0)
+    assert wait == pytest.approx(20.0)  # one token every 20 s at 3/minute
+    assert limiter.check("5.6.7.8", now=0.0) == 0.0, "another address has its own bucket"
+    assert limiter.check("1.2.3.4", now=19.0) > 0.0
+    assert limiter.check("1.2.3.4", now=20.0) == 0.0
+    assert limiter.check("1.2.3.4", now=10_000.0) == 0.0, "a long-idle bucket is full again"
+
+
+def test_the_bucket_table_is_capped_so_a_flood_cannot_grow_it_forever() -> None:
+    """F5: one dict entry per address is itself the leak when addresses are free (an IPv6 /64).
+
+    Forgetting a bucket only ever hands that address a *full* bucket back, so evicting the
+    least-recently-seen entries costs one extra allowed submission, never an unbounded process.
+    """
+    limiter = api_module.RateLimiter(api_module.RateLimit(count=1, seconds=3600.0))
+    for n in range(3000):
+        assert limiter.check(f"2001:db8::{n:x}", now=float(n)) == 0.0
+
+    assert limiter.check("203.0.113.1", now=3000.0) == 0.0
+    assert len(limiter._buckets) <= api_module.BUCKET_PRUNE_AT
+    assert "203.0.113.1" in limiter._buckets, "the newest bucket is never the one evicted"
+    assert "2001:db8::0" not in limiter._buckets, "the oldest buckets go first"
+
+
+def test_no_rate_limit_by_default(client: TestClient) -> None:
+    for _ in range(5):
+        assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 201
+
+
+def _limited_client(monkeypatch: pytest.MonkeyPatch, rate: str, trust_proxy: bool = False) -> TestClient:
+    monkeypatch.setenv("RATE_LIMIT_JOBS", rate)
+    monkeypatch.setenv("TRUST_PROXY", "true" if trust_proxy else "false")
+    get_settings.cache_clear()
+    api_module.reset_rate_limiter()
+    return TestClient(app)
+
+
+def test_the_fourth_job_in_a_minute_is_429_with_retry_after(
+    settings: Settings, runner: StubRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _limited_client(monkeypatch, "3/minute")
+    for attempt in range(3):
+        assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 201, f"attempt {attempt}"
+
+    refused = client.post("/jobs", data=YOUTUBE_FORM)
+    assert refused.status_code == 429
+    assert refused.json()["error"] == "too many jobs from this address; try again in 1 minute"
+    assert 1 <= int(refused.headers["Retry-After"]) <= 60
+    assert len(runner.submitted) == 3, "the refused request created nothing"
+    assert len(store_for(settings).list_ids()) == 3
+
+
+def test_the_limit_is_checked_before_the_form_is_validated(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nonsense must cost a flooder the same token a real job does (otherwise it is free)."""
+    client = _limited_client(monkeypatch, "1/hour")
+    assert client.post("/jobs", data={"source_type": "banana"}).status_code == 400
+    assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 429
+
+
+def test_an_oversize_upload_is_refused_without_spending_a_token(
+    settings: Settings, runner: StubRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F7: a body that can never become a job must not cost the browser its whole allowance.
+
+    Picking one too-large file is a mistake a person makes in the file dialog, not a flood; the 413
+    is free, and the next, correct, submission still goes through under a 1/minute limit.
+    """
+    client = _limited_client(monkeypatch, "1/minute")
+    forged = (settings.max_upload_mb + 4) * 1024 * 1024
+    refused = client.post(
+        "/jobs",
+        data={"source_type": "upload", "to_lang": "es"},
+        files={"file": ("big.mp4", b"tiny", "video/mp4")},
+        headers={"Content-Length": str(forged)},
+    )
+    assert refused.status_code == 413, refused.text
+    assert client.post("/jobs", data=YOUTUBE_FORM).status_code == 201, "the 413 spent a token"
+    assert len(runner.submitted) == 1
+
+
+def test_the_proxy_header_is_ignored_unless_trust_proxy_is_on(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Anyone can send X-Forwarded-For; believing it without a proxy is a free reset."""
+    client = _limited_client(monkeypatch, "1/minute")
+    assert client.post("/jobs", data=YOUTUBE_FORM, headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 201
+    second = client.post("/jobs", data=YOUTUBE_FORM, headers={"X-Forwarded-For": "8.8.8.8"})
+    assert second.status_code == 429, "both came from the same real address"
+
+
+def test_with_trust_proxy_the_last_forwarded_entry_is_the_client(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F1: a proxy *appends* the peer it saw, so the rightmost entry is the only trustworthy one."""
+    client = _limited_client(monkeypatch, "1/minute", trust_proxy=True)
+    peer = {"X-Forwarded-For": "203.0.113.7, 9.9.9.9"}  # junk the client sent, then our proxy's peer
+    assert client.post("/jobs", data=YOUTUBE_FORM, headers=peer).status_code == 201
+    assert client.post("/jobs", data=YOUTUBE_FORM, headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 201
+    assert client.post("/jobs", data=YOUTUBE_FORM, headers=peer).status_code == 429
+
+
+def test_a_client_supplied_forwarded_prefix_cannot_buy_a_fresh_bucket(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F1: reading the leftmost entry meant one header line bought unlimited buckets."""
+    client = _limited_client(monkeypatch, "1/minute", trust_proxy=True)
+    invented = {"X-Forwarded-For": "1.1.1.1, 9.9.9.9"}
+    again = {"X-Forwarded-For": "2.2.2.2, 9.9.9.9"}  # same real peer, a different invented prefix
+    assert client.post("/jobs", data=YOUTUBE_FORM, headers=invented).status_code == 201
+    assert client.post("/jobs", data=YOUTUBE_FORM, headers=again).status_code == 429
+
+
+def test_a_forwarded_entry_that_is_not_an_address_falls_back_to_the_real_peer() -> None:
+    """F1/F5: the bucket key is always a parsed IP, never whatever text arrived in the header."""
+
+    class _Req:
+        headers = {"x-forwarded-for": "10.0.0.1, unknown"}
+        client = types.SimpleNamespace(host="203.0.113.5")
+
+    assert api_module.client_address(_Req(), trust_proxy=True) == "203.0.113.5"  # type: ignore[arg-type]
+    assert api_module.parse_ip("  [2001:db8::1] ") == "2001:db8::1"
+    assert api_module.parse_ip("not-an-ip") is None
+    assert api_module.parse_ip(None) is None
+
+
+def test_a_broken_rate_limit_setting_refuses_the_job_rather_than_ignoring_the_limit(
+    settings: Settings, runner: StubRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _limited_client(monkeypatch, "10 jobs per hour")
+    response = client.post("/jobs", data=YOUTUBE_FORM)
+    assert response.status_code == 500
+    assert "RATE_LIMIT_JOBS" in response.json()["error"]
+    assert runner.submitted == []
+
+
+def test_client_address_falls_back_when_there_is_no_peer() -> None:
+    """Starlette leaves `request.client` None for some transports; the limiter still needs a key."""
+
+    class _Req:
+        headers = {"x-forwarded-for": "9.9.9.9"}
+        client = None
+
+    assert api_module.client_address(_Req(), trust_proxy=False) == "unknown"  # type: ignore[arg-type]
+    assert api_module.client_address(_Req(), trust_proxy=True) == "9.9.9.9"  # type: ignore[arg-type]
+
+
 # --------------------------------------------------------------------------- GET routes
 
 
@@ -367,6 +595,7 @@ def test_store_update_merges_bumps_and_derives(settings: Settings) -> None:
         "to_lang": "es",
         "from_lang": None,
         "backend": "chatterbox",
+        "voice": None,
         "burn_subtitles": True,
     }
     assert updated["detected_language"] == "en"
@@ -384,6 +613,21 @@ def test_store_update_merges_bumps_and_derives(settings: Settings) -> None:
 
     assert store.list_ids() == [job_id]
     assert store.path(job_id) == settings.jobs_dir / job_id
+
+
+def test_fail_clears_the_detail_line(settings: Settings) -> None:
+    """F4: `detail` describes work happening now; a failed job must not still claim to be speaking."""
+    store = store_for(settings)
+    job_id = store.create(source={"type": "youtube", "url": "u"}, options={"to_lang": "es"})
+    running = store.update(job_id, state="running", step="speak", detail="speaking segment 4 of 12")
+    assert running["detail"] == "speaking segment 4 of 12"
+
+    failed = store.fail(job_id, "speak: kokoro ran out of voices")
+    assert failed["state"] == "failed"
+    assert failed["error"] == "speak: kokoro ran out of voices"
+    assert failed["detail"] is None
+    assert read_status(settings, job_id)["detail"] is None
+    assert failed["step"] == "speak", "the step that died is still named"
 
 
 def test_store_rejects_nonsense(settings: Settings) -> None:

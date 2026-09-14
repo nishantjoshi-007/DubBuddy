@@ -1,7 +1,9 @@
+{# Theme toggle (decisions.md D-31, kept by Nishant). The checkbox is the control: it is visually
+   hidden rather than display:none, so it keeps its place in the tab order and can be focused. #}
 <div class="toggle-switch" id="themeToggle">
-<label class="theme-switch">
-    <input type="checkbox" class="theme-switch__checkbox">
-    <div class="theme-switch__container">
+  <label class="theme-switch">
+    <input type="checkbox" class="theme-switch__checkbox" aria-label="Dark theme" />
+    <div class="theme-switch__container" aria-hidden="true">
       <div class="theme-switch__clouds"></div>
       <div class="theme-switch__stars-container">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 55" fill="none">

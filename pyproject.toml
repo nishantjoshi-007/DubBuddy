@@ -44,7 +44,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-clone = ["chatterbox-tts>=0.1.7"]
+# torchaudio is listed explicitly so it comes from the CPU index like torch (a PyPI torchaudio is a CUDA build)
+clone = ["chatterbox-tts>=0.1.7", "torchaudio>=2.4"]
 
 [project.scripts]
 respeak = "respeak.cli:main"
@@ -65,6 +66,7 @@ override-dependencies = ["torch>=2.4"]
 # CPU torch for everyone (uv cannot express "CPU by default, CUDA on request" in one lockfile).
 # CUDA users run, after `uv sync`:  uv pip install torch --index-url https://download.pytorch.org/whl/cu128
 torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [[tool.uv.index]]
