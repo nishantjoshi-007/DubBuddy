@@ -478,4 +478,5 @@ DATE        WHAT CHANGED
 2026-09-13  Phase 3 delivered (3.1–3.7), live acceptance passed, review D-45 → FIX-3; torchaudio pinned to the CPU index; no attribution trailers on commits (D-41)
 2026-09-13  my first look at the finished page → D-46 (no hero), D-47 (voice previews), D-48 (theme rule)
 2026-09-13  testing it myself → D-46 revised (short intro), D-49 never cut speech / slow the video
+2026-09-14  CI live; first run exposed int8 garbage in Argos es→en (D-50) and an ffmpeg frame-rate difference; both fixed
 ```
