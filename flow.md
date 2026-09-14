@@ -389,7 +389,18 @@ Argos. If `src != en` install `src→en`; if `dst != en` install `en→dst`; obt
 Reference clip (Phase 3.7): chosen after transcription — the ≤ 30 s window containing the most speech by ASR segments, cut from `source.wav` at 24 kHz; falls back to the first 30 s when there is no speech.
 
 ### B4.6 fit
-Per segment: slot = `seg.end - seg.start`; ratio = clip_seconds / slot; factor = min(ratio, 1.3) when ratio > 1, otherwise 1.0 — a clip that already fits is never slowed down to fill its slot (review finding F4: the old clamp stretched every short clip by 25 %); `atempo` (chained when outside 0.5–2.0) → fitted clip. Placement: `start_i = max(seg.start, prev_end)`; `end_i = start_i + fitted_seconds`. Assemble on silence of `video_duration` seconds → `dubbed.wav` (24 kHz mono), padded or trimmed to the video length exactly (done with numpy + soundfile for an exact sample count; every other media operation is an ffmpeg subprocess).
+Per segment: slot = `seg.end - seg.start`; ratio = clip_seconds / slot; factor = min(ratio, MAX_SPEECH_SPEEDUP) when ratio > 1, otherwise 1.0 — a clip that already fits is never slowed down; `atempo` (chained when outside 0.5–2.0) → fitted clip.
+
+Then the timeline (D-49, never cut speech):
+```text
+s = max(1, max_i  Σ_{j≥i} d_j / (V − start_i))     d_j fitted clip lengths, V video length, i over sentences
+        ↓
+s ≤ MAX_VIDEO_STRETCH  → the video is slowed by s (setpts, re-encoded even with burn off); sentences are
+                          placed on the stretched timeline: start_i = max(s·seg.start, prev_end)
+s >  MAX_VIDEO_STRETCH  → s = MAX_VIDEO_STRETCH, refit speech with a 1.5× cap, recompute; if it still does
+                          not fit, trim the tail as the last resort and name the affected sentences in `warnings`
+```
+Assemble on silence of `s·V` seconds → `dubbed.wav` (24 kHz mono), exact sample count via numpy + soundfile; every other media operation is an ffmpeg subprocess. A stretch > 1 is reported in `warnings` as information ("the video was slowed by 12 % so all the speech fits").
 
 ### B4.7 subtitles
 `Cue(start_i, end_i, translated_text_i)` → `subs.srt`, millisecond precision, via the `srt` library. No second transcription pass.

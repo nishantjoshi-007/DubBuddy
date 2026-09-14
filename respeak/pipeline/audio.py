@@ -1,25 +1,33 @@
 """Fit each spoken clip to its slot, place it on the timeline, assemble `dubbed.wav`.
 
-flow.md B4.6, plan.md 1.7, decisions.md D-09 (per-segment `atempo`, never a global speed change).
+flow.md B4.6, plan.md 1.7, decisions.md D-09 (per-segment `atempo`, never a global speed change) and
+D-49 (never cut speech: slow the *picture* down instead).
 
     slot_i    = seg.end - seg.start
     factor_i  = min(clip_seconds / slot_i, 1.3) when the clip is too long, else 1.0
                                                             pitch-preserving, chained beyond 0.5–2.0
-    start_i   = max(seg.start, prev_end)                    a long clip pushes the next one later
+    s         = max(1, max_i Σ_{j≥i} d_j / (V − start_i))   the smallest video slowdown that fits
+    start_i   = max(s · seg.start, prev_end)                a long clip pushes the next one later
     end_i     = start_i + fitted_seconds
 
 A clip that is *shorter* than its slot is left alone: stretching speech to fill a gap sounds drunk,
 and the silence after it is exactly the pause the original speaker took.
 
-`assemble()` mixes the fitted clips onto silence of exactly `total_seconds`, so `dubbed.wav` is always
-the length of the video — the mux never has to guess. It reports what did not fit, because a dub that
-quietly loses its last three sentences is the kind of failure nobody notices until it is published.
+`stretch_factor()` answers "how much would the video have to be slowed for all of this speech to fit?"
+in closed form; the caller caps it (`MAX_VIDEO_STRETCH`) and passes what it settled on to `place()`,
+so picture and speech stay aligned on the stretched timeline.
+
+`assemble()` mixes the fitted clips onto silence of exactly `total_seconds` (the caller passes
+`s · video_seconds`), so `dubbed.wav` is always the length of the picture it will be muxed onto — the
+mux never has to guess. It reports what did not fit, because a dub that quietly loses its last three
+sentences is the kind of failure nobody notices until it is published.
 """
 
 from __future__ import annotations
 
 import logging
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -118,19 +126,66 @@ def atempo_chain(factor: float) -> list[float]:
     return parts
 
 
-def place(segments: list[Segment], fitted: list[tuple[Path, float]]) -> list[Placed]:
+def stretch_factor(
+    segments: Sequence[Segment],
+    fitted_seconds: Sequence[float],
+    video_seconds: float,
+) -> float:
+    """The smallest factor the video must be slowed by for every clip to fit (D-49, flow.md B4.6).
+
+        s = max(1, max_i  Σ_{j≥i} d_j / (V − start_i))
+
+    Why this is the whole answer: on a timeline slowed by `s` the cascade ends at
+    `max_i (s·start_i + Σ_{j≥i} d_j)`, so "the last word lands before the picture stops" is
+    `s·start_i + Σ_{j≥i} d_j ≤ s·V` for every sentence — one division each, no search.
+
+    1.0 means everything already fits. A sentence that starts after the video ends cannot be rescued
+    by any slowdown (`s·start_i > s·V` for every `s`), so it is skipped as a divisor — its clip still
+    counts towards the tail every earlier sentence has to carry.
+    """
+    if len(segments) != len(fitted_seconds):
+        raise ValueError(
+            f"stretch_factor() got {len(segments)} segments but {len(fitted_seconds)} clip lengths"
+        )
+    if video_seconds <= 0:
+        raise ValueError(f"stretch_factor() needs a positive video length, got {video_seconds!r}")
+    lengths = [float(seconds) for seconds in fitted_seconds]
+    if any(seconds < 0 for seconds in lengths):
+        raise ValueError(f"stretch_factor() got a negative clip length in {lengths!r}")
+    factor = 1.0
+    tail = 0.0  # Σ_{j≥i} d_j, accumulated from the back so the whole sweep is one pass.
+    for segment, seconds in zip(reversed(segments), reversed(lengths), strict=True):
+        tail += seconds
+        room = video_seconds - float(segment.start)
+        if room <= 0:  # starts at or after the end of the picture: never fits, never a divisor
+            continue
+        factor = max(factor, tail / room)
+    return factor
+
+
+def place(
+    segments: list[Segment],
+    fitted: list[tuple[Path, float]],
+    *,
+    stretch: float = 1.0,
+) -> list[Placed]:
     """Lay the fitted clips on the timeline, never overlapping (flow.md B4.6).
 
     `segments[i].text` is what the subtitle will say, so callers pass the *translated* segments.
+    `stretch` is the factor the picture is being slowed by (D-49): every original start moves to
+    `stretch · seg.start`, which keeps each sentence over the shot it belongs to; the cascade that
+    pushes a long clip into the next slot is unchanged.
     """
     if len(segments) != len(fitted):
         raise ValueError(f"place() got {len(segments)} segments but {len(fitted)} fitted clips")
+    if stretch <= 0:
+        raise ValueError(f"place() needs a positive stretch factor, got {stretch!r}")
     placed: list[Placed] = []
     prev_end = 0.0
     for segment, (path, seconds) in zip(segments, fitted, strict=True):
         if seconds < 0:
             raise ValueError(f"fitted clip {path} reports a negative length ({seconds})")
-        start = max(float(segment.start), prev_end)
+        start = max(float(stretch) * float(segment.start), prev_end)
         end = start + float(seconds)
         placed.append(Placed(path=Path(path), start=start, end=end, text=segment.text))
         prev_end = end

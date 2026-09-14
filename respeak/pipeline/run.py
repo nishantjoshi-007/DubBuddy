@@ -8,6 +8,10 @@ here that a user should see: exceptions propagate, and the job ends `failed` wit
     probe .02 → fetch .10 → transcribe .30 → translate .40 → speak .60 → fit .75
               → subtitles .80 → mux .95 → finish 1.0
 
+The fit stage never cuts speech to make it fit (decisions.md D-49): when the translation runs long it
+slows the *picture* down instead, and the one factor `stretch` travels from `audio.stretch_factor()`
+through `place()` and `assemble()` into `mux()`, so audio, subtitles and video share one timeline.
+
 Long stages move the bar inside their own range instead of sitting still (plan.md 3.1): fetch .02–.10,
 transcribe .30–.40, speak .60–.75, mux .80–.95 — see `STEP_RANGE`. Every stage also writes
 `status.detail`, one short sentence saying what is happening right now ("downloading 3.1 MB of 7.4 MB",
@@ -92,6 +96,19 @@ MIN_SLOT_SECONDS = 0.1
 
 #: Trimming less than this off the tail of the dub is rounding, not something to warn a user about.
 TRIM_WARNING_SECONDS = 0.25
+
+#: D-49 step 4: once the video is as slow as it may go, the sentences that still overrun are sped up
+#: this hard — fast, but still intelligible — before anything is allowed to be cut.
+LAST_RESORT_SPEEDUP = 1.5
+
+#: A slowdown smaller than this (in percent) is not worth a sentence in `warnings`.
+STRETCH_WARNING_PERCENT = 0.5
+
+#: A cue may end this far past the end of the picture before it counts as speech that did not fit.
+OVERFLOW_TOLERANCE_SECONDS = 0.05
+
+#: How much of a sentence a warning quotes before it trails off.
+WARNING_QUOTE_CHARS = 40
 
 
 class PipelineError(RuntimeError):
@@ -194,21 +211,42 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
 
     # -- fit --------------------------------------------------------------------------------------
     with _stage(store, job_id, "fit", timings, "fitting the audio to the video"):
-        fitted: list[tuple[Path, float]] = []
-        for index, (segment, clip) in enumerate(zip(spoken, clips, strict=True), start=1):
-            slot = max(segment.end - segment.start, MIN_SLOT_SECONDS)
-            fitted.append(audio.fit(clip, slot, job_dir / f"seg_{index:04d}_fit.wav"))
-        placed = audio.place(spoken, fitted)
-        assembled = audio.assemble(placed, video_seconds, job_dir / DUBBED_WAV)
+        slots = [max(segment.end - segment.start, MIN_SLOT_SECONDS) for segment in spoken]
+        fitted = _fit_clips(clips, slots, job_dir, hi=settings.max_speech_speedup)
+        # D-49: how much slower the picture would have to run for every sentence to fit whole.
+        stretch = audio.stretch_factor(spoken, [seconds for _, seconds in fitted], video_seconds)
+        speech_cap = settings.max_speech_speedup
+        if stretch > settings.max_video_stretch:
+            stretch = settings.max_video_stretch
+            speech_cap = LAST_RESORT_SPEEDUP
+            store.update(job_id, detail="speeding up the sentences that still do not fit")
+            fitted = _fit_clips(
+                clips,
+                [slot * stretch for slot in slots],
+                job_dir,
+                hi=speech_cap,
+                keep=fitted,  # only the clips that still overrun their stretched slot are redone
+            )
+        total_seconds = stretch * video_seconds
+        placed = audio.place(spoken, fitted, stretch=stretch)
+        assembled = audio.assemble(placed, total_seconds, job_dir / DUBBED_WAV)
         dubbed_wav = assembled.path
-        warnings = assemble_warnings(assembled)
+        log.info(
+            "job %s: fit %d clips onto %.2f s of video (stretch %.4f, speech cap %.2f)",
+            job_id,
+            len(fitted),
+            video_seconds,
+            stretch,
+            speech_cap,
+        )
+        warnings = fit_warnings(placed, total_seconds, stretch, speech_cap, assembled)
         if warnings:
             log.warning("job %s: %s", job_id, " ".join(warnings))
             store.update(job_id, warnings=warnings)
 
     # -- subtitles --------------------------------------------------------------------------------
     with _stage(store, job_id, "subtitles", timings, "writing subtitles"):
-        subs_srt = subtitles.build_srt(_cues(placed), job_dir / SUBS_SRT)
+        subs_srt = subtitles.build_srt(_cues(placed, total_seconds), job_dir / SUBS_SRT)
 
     # -- mux --------------------------------------------------------------------------------------
     with _stage(store, job_id, "mux", timings, "encoding the video"):
@@ -219,7 +257,8 @@ def run_job(job_id: str, settings: Settings, store: JobStore) -> None:
             burn,
             to_lang,
             job_dir / OUTPUT_MP4,
-            progress=_progress_reporter(store, job_id, "mux", _clock_detail("encoding", video_seconds)),
+            stretch=stretch,
+            progress=_progress_reporter(store, job_id, "mux", _clock_detail("encoding", total_seconds)),
         )
         if not out_mp4.is_file() or out_mp4.stat().st_size == 0:
             raise PipelineError(f"ffmpeg wrote no output for job {job_id}")
@@ -291,6 +330,31 @@ def _reference(
         return fallback
     store.update(job_id, detail="picking a reference clip")
     return inputs.reference_from_segments(source_wav, segments, job_dir / REFERENCE_WAV)
+
+
+def _fit_clips(
+    clips: list[Path],
+    targets: list[float],
+    job_dir: Path,
+    *,
+    hi: float,
+    keep: list[tuple[Path, float]] | None = None,
+) -> list[tuple[Path, float]]:
+    """B4.6: speed each spoken clip towards its slot, at most by `hi`; return (path, real length).
+
+    Every pass starts from the *original* clip, so raising the cap on the second pass (D-49 step 4)
+    speeds that sentence up 1.5× in total, not 1.3 × 1.5. With `keep`, the clips that already fit
+    their (new, stretched) target are left exactly as they were and only the overrunning ones are
+    re-encoded — usually one or two of them.
+    """
+    fitted: list[tuple[Path, float]] = []
+    for index, (clip, target) in enumerate(zip(clips, targets, strict=True), start=1):
+        previous = keep[index - 1] if keep is not None else None
+        if previous is not None and previous[1] <= target:
+            fitted.append(previous)
+            continue
+        fitted.append(audio.fit(clip, target, job_dir / f"seg_{index:04d}_fit.wav", hi=hi))
+    return fitted
 
 
 def cleanup(job_dir: Path) -> list[str]:
@@ -506,9 +570,75 @@ def _translated_segments(segments: list[Segment], texts: list[str]) -> list[Segm
     ]
 
 
-def _cues(placed: list[Placed]) -> list[Cue]:
-    """B4.7: the subtitle times are the times the dubbed clips actually got."""
-    return [Cue(start=item.start, end=item.end, text=item.text) for item in placed]
+def _cues(placed: list[Placed], total_seconds: float) -> list[Cue]:
+    """B4.7: the subtitle times are the times the dubbed clips actually got, clipped to the picture.
+
+    A cue can only run past the end when speech had to be cut after all (D-49's last resort), and a
+    subtitle that outlives the video makes the finished file *claim* a length the picture does not
+    have — mp4 duration is the longest stream, subtitles included.
+    """
+    cues: list[Cue] = []
+    for item in placed:
+        if item.start >= total_seconds:  # this sentence is not in the dub either; assemble dropped it
+            continue
+        cues.append(Cue(start=item.start, end=min(item.end, total_seconds), text=item.text))
+    return cues
+
+
+def fit_warnings(
+    placed: list[Placed],
+    total_seconds: float,
+    stretch: float,
+    speech_cap: float,
+    assembled: audio.AssembleResult,
+) -> list[str]:
+    """Everything the browser should be told about the timeline, in the order it should read it (D-49).
+
+    One informational line when the picture was slowed, then — only if speech *still* did not fit,
+    which the cap makes rare — the sentences that ran off the end and how much was lost.
+    """
+    messages: list[str] = []
+    slowed = stretch_warning(stretch)
+    if slowed is not None:
+        messages.append(slowed)
+    overflow = overflow_warning(placed, total_seconds, stretch, speech_cap)
+    if overflow is None:
+        return messages + assemble_warnings(assembled)
+    messages.append(overflow)
+    if assembled.lost_seconds >= TRIM_WARNING_SECONDS:
+        messages.append(cut_sentence(assembled.lost_seconds))
+    return messages
+
+
+def stretch_warning(stretch: float) -> str | None:
+    """The line a slowed video earns: "The video was slowed by 12 % so all the speech fits."
+
+    None when the change is under half a percent — nobody needs to be told about 0.3 %.
+    """
+    percent = (float(stretch) - 1.0) * 100.0
+    if percent < STRETCH_WARNING_PERCENT:
+        return None
+    return f"The video was slowed by {percent:.0f} % so all the speech fits."
+
+
+def overflow_warning(
+    placed: list[Placed],
+    total_seconds: float,
+    stretch: float,
+    speech_cap: float,
+) -> str | None:
+    """Name the sentences that ran past the end of the (already slowed) picture; None when none did."""
+    over = [item for item in placed if item.end > total_seconds + OVERFLOW_TOLERANCE_SECONDS]
+    if not over:
+        return None
+    slowed = round((float(stretch) - 1.0) * 100)
+    reason = (
+        f"even after slowing the video {slowed} % and speeding speech to {speech_cap:g}×"
+        if slowed >= 1
+        else "before the video ended"
+    )
+    quoted = ", ".join(_quote(item.text) for item in over)
+    return f"{len(over)} sentence{'' if len(over) == 1 else 's'} could not fit {reason}: {quoted}"
 
 
 def assemble_warnings(result: audio.AssembleResult) -> list[str]:
@@ -525,14 +655,26 @@ def assemble_warnings(result: audio.AssembleResult) -> list[str]:
             "did not fit before the video ended and were cut."
         )
     if result.trimmed_seconds >= TRIM_WARNING_SECONDS:
-        messages.append(
-            f"The dub was {result.trimmed_seconds:.1f} s longer than the video and was trimmed to fit."
-        )
+        messages.append(cut_sentence(result.trimmed_seconds))
     return messages
+
+
+def cut_sentence(seconds: float) -> str:
+    """Say what was lost, not how long the dub was: "The last 2.2 s of speech were cut."."""
+    return f"The last {seconds:.1f} s of speech were cut to fit the video."
+
+
+def _quote(text: str, limit: int = WARNING_QUOTE_CHARS) -> str:
+    """A sentence as it appears inside a warning: one line, trailing off after `limit` characters."""
+    clean = " ".join(str(text).split())
+    if len(clean) > limit:
+        clean = clean[:limit].rstrip() + "…"
+    return f"'{clean}'"
 
 
 __all__ = [
     "KEPT_FILES",
+    "LAST_RESORT_SPEEDUP",
     "OUTPUT_MP4",
     "STEPS",
     "STEP_PROGRESS",
@@ -541,6 +683,10 @@ __all__ = [
     "PipelineError",
     "assemble_warnings",
     "cleanup",
+    "cut_sentence",
+    "fit_warnings",
     "get_translator",
+    "overflow_warning",
     "run_job",
+    "stretch_warning",
 ]

@@ -102,6 +102,8 @@ Every setting is an environment variable or a line in `.env`. Defaults in `.env.
 | `MAX_HEIGHT` | `720` | YouTube download resolution cap |
 | `MAX_CONCURRENT_JOBS` | `1` | jobs are CPU-bound; raise only with cores to spare |
 | `JOB_TTL_MINUTES` | `60` | finished jobs are deleted after this |
+| `MAX_SPEECH_SPEEDUP` | `1.3` | how much faster a sentence may be spoken to fit its slot |
+| `MAX_VIDEO_STRETCH` | `1.15` | how much the video may be slowed so all speech fits; speech is never cut before this is exhausted |
 | `DATA_DIR` | `./data` | where jobs live (never served as static files) |
 | `ALLOW_UPLOADS` | `true` | set `false` to accept YouTube URLs only |
 | `YTDLP_COOKIES_FILE` | unset | Netscape cookies file for YouTube's "confirm you're not a bot" wall |

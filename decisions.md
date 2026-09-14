@@ -291,8 +291,28 @@ pyproject.toml stays  it is what uv reads to lock and install dependencies (the 
 respeak/ stays        a folder Python imports; it has nothing to do with publishing
 ```
 
-**D-46 No hero text** — Made (Nishant, 2026-09-13)
-The big heading and the subtitle-style lede were removed: "feels too much text". The page opens with the card; the header brand and the two tabs carry the meaning. No replacement copy.
+**D-46 Hero text** — Made (Nishant, 2026-09-13; revised the same day)
+The big heading and the subtitle-style lede were removed ("feels too much text"), then replaced on request by one short heading and one sentence: "Dub a video into another language." / "Paste a link or upload a file. Respeak transcribes, translates, re-voices and subtitles it on your own machine."
+
+**D-49 When the dub is longer than the video** — Made (Nishant: "yep, it's a go", 2026-09-13)
+```text
+what happened      English → Hindi expands ~20–30 %; per-sentence speed-up is capped at 1.3× and the cascade pushes
+                   later sentences until the last one runs 2.2 s past the end of the picture; assemble() then
+                   trimmed the AUDIO to the video length — the last words were cut, and the warning said so badly
+chosen (proposed)  never cut speech. Order of remedies, each with a cap:
+                   1. use the natural gaps between sentences (already done by the cascade)
+                   2. speed the speech up, at most MAX_SPEECH_SPEEDUP = 1.3×
+                   3. slow the VIDEO down uniformly by the smallest factor s that makes everything fit,
+                      at most MAX_VIDEO_STRETCH = 1.15 (a 3–10 % slowdown is invisible on talking-head or
+                      slide content); sentences are placed on the stretched timeline so picture and speech
+                      stay aligned; the video is re-encoded when stretched (also with burn off)
+                   4. only if still over: raise the speech cap to 1.5×, and as the very last resort trim,
+                      with a warning that names the sentences affected
+                   closed form for s: s = max(1, max_i Σ_{j≥i} d_j / (V − start_i)) over sentences i,
+                   where d_j are fitted clip lengths and V the video length
+rejected           cutting speech (today); raising the speech cap alone (rushed, unintelligible Hindi);
+                   freeze-frames only where speech overflows (works, but jerky and much harder to get right)
+```
 
 **D-47 Voice previews** — Made (Nishant asked; design by Claude)
 ```text
@@ -443,4 +463,5 @@ DATE        WHAT CHANGED
 2026-09-13  N-24 / D-44: model roster closed (Kokoro + Chatterbox only), CLI in; Phase 3 started in full
 2026-09-13  Phase 3 delivered (WP-3A…3D), live acceptance passed, review D-45 → FIX-3; torchaudio pinned to the CPU index; no attribution trailers on commits (D-41)
 2026-09-13  Nishant's first-look feedback → D-46 (no hero), D-47 (voice previews), D-48 (theme rule); WP-3E
+2026-09-13  Nishant's test feedback → D-46 revised (short intro), D-49 never cut speech / slow the video (WP-3F)
 ```

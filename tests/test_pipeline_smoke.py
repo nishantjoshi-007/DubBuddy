@@ -484,7 +484,8 @@ def test_assemble_warnings_name_the_segments_and_the_seconds() -> None:
     messages = assemble_warnings(result)
     assert len(messages) == 2
     assert messages[0] == ("3 segments (12.4 s of speech) did not fit before the video ended and were cut.")
-    assert "1.5 s" in messages[1]
+    # D-49: the sentence says what was *cut*, not how much longer than the video the dub was.
+    assert messages[1] == "The last 1.5 s of speech were cut to fit the video."
     assert all(message.endswith(".") for message in messages)
 
 
@@ -517,6 +518,154 @@ def test_a_dub_that_does_not_fit_is_reported_in_the_status(
     assert status["error"] is None
     assert status["warnings"], "a truncated dub must not look like a perfect one"
     assert any("did not fit" in w or "trimmed" in w for w in status["warnings"]), status["warnings"]
+
+
+# --------------------------------------------------------------------------------------------------
+# D-49 — speech that does not fit slows the video down instead of being cut (no model needed)
+# --------------------------------------------------------------------------------------------------
+
+STARTS: tuple[float, ...] = tuple(start for start, _, _ in FAKE_SEGMENTS)
+SLOTS: tuple[float, ...] = tuple(end - start for start, end, _ in FAKE_SEGMENTS)
+
+
+class RatioBackend(FakeBackend):
+    """A backend whose clip for each sentence is `ratio ×` the slot the original speaker used.
+
+    `ratio` is what a real expansion looks like measured against the source timing: English → Hindi
+    lands around 1.2–1.3 before any speed-up, and a wordy sentence far past that.
+    """
+
+    def __init__(self, ratio: float) -> None:
+        super().__init__()
+        self.ratio = ratio
+        self.spoken_seconds: list[float] = []
+
+    def synthesize(
+        self, text: str, lang: str, reference_wav: Path | None, out: Path, voice: str | None = None
+    ) -> Path:
+        seconds = self.ratio * SLOTS[len(self.spoken_seconds) % len(SLOTS)]
+        self.spoken_seconds.append(seconds)
+        self.calls.append((text, lang, reference_wav, voice))
+        ffmpeg.run(
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                f"sine=frequency=330:sample_rate=24000:duration={seconds:.3f}",
+                "-ac",
+                "1",
+                "-c:a",
+                "pcm_s16le",
+                str(out),
+            ]
+        )
+        return out
+
+
+def expected_stretch(ratio: float, cap: float, video_seconds: float) -> float:
+    """D-49's closed form, worked out here from the fake clip lengths instead of from `audio`.
+
+    A clip `ratio ×` its slot is sped up by at most `cap`, so it still covers `ratio / cap` slots;
+    `s` is then the worst `Σ_{j≥i} d_j / (V − start_i)` over the sentences.
+    """
+    fitted = [slot * max(1.0, ratio / cap) for slot in SLOTS]
+    factors = [
+        sum(fitted[index:]) / (video_seconds - start)
+        for index, start in enumerate(STARTS)
+        if start < video_seconds
+    ]
+    return max([1.0, *factors])
+
+
+def test_speech_that_overruns_slows_the_video_instead_of_being_cut(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-49 steps 1–3: clips 1.7× their slots survive whole because the picture runs ~8 % slower.
+
+    (1.25× — the average English → Hindi expansion — needs no slowdown at all here: the 1.3× speech
+    cap and the pauses between the sentences already swallow it. It takes ~1.6× to move the picture.)
+    """
+    backend = RatioBackend(1.7)
+    fake_models(monkeypatch, backend)
+    video_seconds = ffmpeg.duration(SAMPLE_MP4)
+    stretch = expected_stretch(1.7, settings.max_speech_speedup, video_seconds)
+    assert 1.0 < stretch <= settings.max_video_stretch, stretch
+    job_id = make_upload_job(store)
+    job_dir = store.path(job_id)
+
+    run_job(job_id, settings, store)
+
+    status = store.require(job_id)
+    assert status["state"] == "done"
+    assert status["error"] is None
+    percent = round((stretch - 1.0) * 100)
+    assert status["warnings"] == [f"The video was slowed by {percent} % so all the speech fits."]
+    assert not any("cut" in warning for warning in status["warnings"]), status["warnings"]
+
+    out = job_dir / OUTPUT_MP4
+    measured = ffmpeg.duration(out)
+    print(f"\n[D-49 fits] s={stretch:.4f} source={video_seconds:.2f}s out={measured:.2f}s")
+    assert measured == pytest.approx(stretch * video_seconds, abs=0.2)
+    assert measured > video_seconds + 0.3  # the picture really is longer than it was
+
+    # The subtitles live on the same stretched timeline, so the last cue is still on screen.
+    last = cues_of(job_dir / SUBS_SRT)[-1]
+    assert last.end.total_seconds() <= measured + 0.1
+    assert last.start.total_seconds() > STARTS[-1]  # moved later by the slowdown, not left behind
+
+
+def test_speech_that_overruns_even_the_slowest_video_is_named_in_the_warnings(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-49 step 4: the cap holds at 15 %, speech goes to 1.5×, and what is still lost is named."""
+    backend = RatioBackend(3.5)
+    fake_models(monkeypatch, backend)
+    video_seconds = ffmpeg.duration(SAMPLE_MP4)
+    assert expected_stretch(3.5, settings.max_speech_speedup, video_seconds) > settings.max_video_stretch
+    stretch = settings.max_video_stretch
+    job_id = make_upload_job(store, burn_subtitles=False)
+    job_dir = store.path(job_id)
+
+    run_job(job_id, settings, store)
+
+    status = store.require(job_id)
+    assert status["state"] == "done"
+    warnings = status["warnings"]
+    assert warnings[0] == "The video was slowed by 15 % so all the speech fits."
+    named = next(w for w in warnings if "could not fit" in w)
+    assert "slowing the video 15 % and speeding speech to 1.5×" in named
+    assert "'en es: " in named, named  # the sentences themselves are quoted, truncated
+    assert any(w.startswith("The last ") and "were cut to fit the video." in w for w in warnings), warnings
+
+    out = job_dir / OUTPUT_MP4
+    measured = ffmpeg.duration(out)
+    print(f"\n[D-49 capped] s={stretch:.4f} source={video_seconds:.2f}s out={measured:.2f}s {warnings}")
+    assert measured == pytest.approx(stretch * video_seconds, abs=0.2)
+    # Even with burn off, a stretched picture must be re-encoded — a stream copy cannot apply setpts.
+    assert stream_of(out, "video")["codec_name"] == "h264"
+    assert video_md5(out) != video_md5(SAMPLE_MP4), "the stretched video was copied, not re-encoded"
+
+
+def test_speech_that_fits_leaves_the_video_exactly_as_it_was(
+    settings: Settings, store: JobStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The common case pays nothing for D-49: no stretch, no warning, and still a stream copy."""
+    backend = RatioBackend(0.9)
+    fake_models(monkeypatch, backend)
+    video_seconds = ffmpeg.duration(SAMPLE_MP4)
+    assert expected_stretch(0.9, settings.max_speech_speedup, video_seconds) == 1.0
+    job_id = make_upload_job(store, burn_subtitles=False)
+    job_dir = store.path(job_id)
+
+    run_job(job_id, settings, store)
+
+    status = store.require(job_id)
+    assert status["state"] == "done"
+    assert status["warnings"] == []
+    measured = ffmpeg.duration(job_dir / OUTPUT_MP4)
+    print(f"\n[D-49 fits already] s=1.0 source={video_seconds:.2f}s out={measured:.2f}s")
+    assert measured == pytest.approx(video_seconds, abs=0.2)
+    assert video_md5(job_dir / OUTPUT_MP4) == video_md5(SAMPLE_MP4), "the picture was touched anyway"
 
 
 # --------------------------------------------------------------------------------------------------

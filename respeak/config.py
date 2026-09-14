@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     #: through English, Kokoro voices, and the Japanese dictionary when "ja" is in the list).
     prewarm_languages: str = "en,es"
 
+    max_speech_speedup: float = 1.3  # a sentence may be spoken up to this much faster to fit its slot
+    max_video_stretch: float = 1.15  # the video may be slowed by up to this factor so all speech fits (D-49)
     rate_limit_jobs: str = ""  # e.g. "10/hour"; empty = off
     trust_proxy: bool = False  # honour X-Forwarded-For for rate limiting
 

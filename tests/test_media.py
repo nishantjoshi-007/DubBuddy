@@ -590,6 +590,85 @@ def test_place_checks_the_lists_line_up() -> None:
         audio.place([Segment(0.0, 1.0, "a")], [])
 
 
+# --------------------------------------------------------------------------------------------------
+# audio.py — the video slowdown that keeps every sentence (D-49, flow.md B4.6)
+# --------------------------------------------------------------------------------------------------
+
+
+def test_stretch_factor_is_one_when_the_speech_already_fits() -> None:
+    """Nothing overruns, so the picture is left at its own speed."""
+    segments = [Segment(0.0, 2.0, "a"), Segment(2.0, 4.0, "b"), Segment(6.0, 8.0, "c")]
+    assert audio.stretch_factor(segments, [1.0, 1.0, 1.0], 10.0) == 1.0
+    assert audio.stretch_factor(segments, [2.0, 2.0, 2.0], 10.0) == 1.0  # exactly fills, still 1.0
+
+
+def test_stretch_factor_is_the_worst_sentence_not_the_last_one() -> None:
+    """Hand-computed: 11/10 = 1.10, 8/8 = 1.00, 5/4 = 1.25 → the third sentence sets the factor."""
+    segments = [Segment(0.0, 2.0, "a"), Segment(2.0, 4.0, "b"), Segment(6.0, 8.0, "c")]
+    assert audio.stretch_factor(segments, [3.0, 3.0, 5.0], 10.0) == pytest.approx(1.25)
+
+
+def test_stretch_factor_is_set_by_one_late_long_sentence() -> None:
+    """Everything before it is comfortable; the 6 s clip in the last 3 s of the video is not."""
+    segments = [Segment(0.0, 1.0, "a"), Segment(2.0, 3.0, "b"), Segment(9.0, 10.0, "c")]
+    assert audio.stretch_factor(segments, [1.0, 1.0, 6.0], 12.0) == pytest.approx(2.0)  # 6/(12-9)
+
+
+def test_stretch_factor_when_every_sentence_overflows() -> None:
+    """Each sentence alone needs the video slowed; the cascade of all three needs it most."""
+    segments = [Segment(0.0, 2.0, "a"), Segment(2.0, 4.0, "b"), Segment(4.0, 6.0, "c")]
+    # 9/6 = 1.5, 6/4 = 1.5, 3/2 = 1.5 — the same everywhere: the dub is uniformly 1.5× too long.
+    assert audio.stretch_factor(segments, [3.0, 3.0, 3.0], 6.0) == pytest.approx(1.5)
+
+
+def test_stretch_factor_skips_a_sentence_that_starts_after_the_video_ends() -> None:
+    """No slowdown can rescue it (s·start > s·V for every s), but its clip still weighs on the tail."""
+    segments = [Segment(0.0, 1.0, "a"), Segment(11.0, 12.0, "late")]
+    # Only sentence 0 is a divisor: (1 + 2) / (10 - 0) = 0.3 → nothing to do.
+    assert audio.stretch_factor(segments, [1.0, 2.0], 10.0) == 1.0
+    # …and the late clip does count: (5 + 2) / (10 - 4) = 1.1666…
+    assert audio.stretch_factor(
+        [Segment(4.0, 5.0, "a"), Segment(11.0, 12.0, "late")], [5.0, 2.0], 10.0
+    ) == pytest.approx(7.0 / 6.0)
+
+
+def test_stretch_factor_of_nothing_is_one() -> None:
+    assert audio.stretch_factor([], [], 10.0) == 1.0
+
+
+def test_stretch_factor_checks_its_arguments() -> None:
+    with pytest.raises(ValueError, match="clip lengths"):
+        audio.stretch_factor([Segment(0.0, 1.0, "a")], [], 10.0)
+    with pytest.raises(ValueError, match="positive video length"):
+        audio.stretch_factor([Segment(0.0, 1.0, "a")], [1.0], 0.0)
+    with pytest.raises(ValueError, match="negative clip length"):
+        audio.stretch_factor([Segment(0.0, 1.0, "a")], [-1.0], 10.0)
+
+
+def test_place_moves_every_start_onto_the_stretched_timeline() -> None:
+    """D-49: the picture is 10 % slower, so each sentence starts 10 % later and stays over its shot."""
+    segments = [Segment(0.0, 2.0, "one"), Segment(2.0, 4.0, "two"), Segment(10.0, 12.0, "three")]
+    fitted = [(Path("a.wav"), 1.0), (Path("b.wav"), 1.0), (Path("c.wav"), 2.0)]
+    placed = audio.place(segments, fitted, stretch=1.1)
+    assert [(round(p.start, 6), round(p.end, 6)) for p in placed] == [
+        (0.0, 1.0),
+        (2.2, 3.2),
+        (11.0, 13.0),
+    ]
+
+
+def test_place_still_cascades_on_a_stretched_timeline() -> None:
+    """A clip that is longer than its (stretched) gap pushes the next one, exactly as before."""
+    segments = [Segment(0.0, 2.0, "one"), Segment(2.0, 4.0, "two")]
+    placed = audio.place(segments, [(Path("a.wav"), 3.0), (Path("b.wav"), 1.0)], stretch=1.2)
+    assert [(round(p.start, 6), round(p.end, 6)) for p in placed] == [(0.0, 3.0), (3.0, 4.0)]
+
+
+def test_place_rejects_a_nonsense_stretch() -> None:
+    with pytest.raises(ValueError, match="positive stretch"):
+        audio.place([Segment(0.0, 1.0, "a")], [(Path("a.wav"), 1.0)], stretch=0.0)
+
+
 def test_assemble_is_exactly_the_video_length(tmp_path: Path) -> None:
     first = make_tone(tmp_path / "s1.wav", 1.0)
     second = make_tone(tmp_path / "s2.wav", 1.0, freq=660)
@@ -810,6 +889,112 @@ def test_mux_without_burn_still_reports_progress(sample_video: Path, dubbed: Pat
     )
     assert seen[-1] == 1.0
     assert seen == sorted(seen)
+
+
+STRETCH = 1.12
+"""The slowdown the two `setpts` tests use: 12 %, inside `Settings.max_video_stretch`."""
+
+
+@pytest.fixture
+def stretched_dub(tmp_path: Path) -> Path:
+    """`dubbed.wav` as the pipeline builds it when the video is slowed: `stretch ×` the source length."""
+    return audio.assemble(
+        audio.place(
+            [Segment(1.0, 3.0, "hola")],
+            [(make_tone(tmp_path / "seg_slow.wav", 2.0), 2.0)],
+            stretch=STRETCH,
+        ),
+        10.0 * STRETCH,
+        tmp_path / "dubbed_slow.wav",
+    ).path
+
+
+def frame_count(path: Path) -> int:
+    """Decoded video frames — `setpts` must respace them, never add or drop any."""
+    proc = ffmpeg.run(
+        [
+            "ffprobe",
+            "-loglevel",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "default=nw=1:nk=1",
+            str(path),
+        ]
+    )
+    return int(proc.stdout.strip())
+
+
+def test_mux_slows_the_picture_when_the_dub_asks_for_it(
+    sample_video: Path, stretched_dub: Path, tmp_path: Path
+) -> None:
+    """D-49: `setpts=1.12*PTS` — 12 % longer, the same frames, the cues still burned in."""
+    subs = subtitles.build_srt([Cue(1.12, 3.36, "Hola mundo")], tmp_path / "subs.srt")
+    out = mux.mux(
+        sample_video, stretched_dub, subs, burn=True, lang="es", out=tmp_path / "slow.mp4", stretch=STRETCH
+    )
+    assert ffmpeg.duration(out) == pytest.approx(10.0 * STRETCH, abs=0.1)
+    assert frame_count(out) == frame_count(sample_video)
+    streams = codecs(out)
+    assert streams["video"] == ["h264"]
+    assert streams["subtitle"] == ["mov_text"]
+
+
+def test_mux_reencodes_a_stretched_video_even_with_burn_off(
+    sample_video: Path, stretched_dub: Path, tmp_path: Path
+) -> None:
+    """A filter and `-c:v copy` cannot both apply: burn=False still re-encodes when stretching."""
+    subs = subtitles.build_srt([Cue(1.12, 3.36, "Hola mundo")], tmp_path / "subs.srt")
+    out = mux.mux(
+        sample_video,
+        stretched_dub,
+        subs,
+        burn=False,
+        lang="es",
+        out=tmp_path / "soft_slow.mp4",
+        stretch=STRETCH,
+    )
+    assert codecs(sample_video)["video"] == ["mpeg4"]  # the copy path would have kept this
+    assert codecs(out)["video"] == ["h264"]
+    assert ffmpeg.duration(out) == pytest.approx(10.0 * STRETCH, abs=0.1)
+    assert frame_count(out) == frame_count(sample_video)
+
+
+def test_mux_stretches_a_video_with_no_subtitle_file_at_all(
+    sample_video: Path, stretched_dub: Path, tmp_path: Path
+) -> None:
+    """Without subtitles the output length is `-t`, not `-shortest`: the stretched picture decides it."""
+    seen: list[float] = []
+    out = mux.mux(
+        sample_video,
+        stretched_dub,
+        None,
+        burn=False,
+        lang="es",
+        out=tmp_path / "slow_plain.mp4",
+        stretch=STRETCH,
+        progress=seen.append,
+    )
+    assert "subtitle" not in codecs(out)
+    assert codecs(out)["video"] == ["h264"]
+    assert ffmpeg.duration(out) == pytest.approx(10.0 * STRETCH, abs=0.1)
+    assert seen[-1] == 1.0 and seen == sorted(seen)
+
+
+def test_mux_at_stretch_one_still_copies_the_video(sample_video: Path, dubbed: Path, tmp_path: Path) -> None:
+    """The default is the old behaviour to the letter: no filter, no re-encode."""
+    out = mux.mux(sample_video, dubbed, None, burn=False, lang="es", out=tmp_path / "plain1.mp4", stretch=1.0)
+    assert codecs(out)["video"] == ["mpeg4"]
+    assert ffmpeg.duration(out) == pytest.approx(10.0, abs=0.2)
+
+
+def test_mux_rejects_a_nonsense_stretch(sample_video: Path, dubbed: Path, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="positive stretch"):
+        mux.mux(sample_video, dubbed, None, burn=False, lang="es", out=tmp_path / "never.mp4", stretch=0.0)
 
 
 def test_mux_reports_a_missing_input(sample_video: Path, tmp_path: Path) -> None:
