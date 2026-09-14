@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.0 — 2026-09-13
+## v2.0.0 — 2026-09-14
 
 ### A rebuild, not an update
 
