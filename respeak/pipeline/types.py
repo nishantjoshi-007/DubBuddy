@@ -55,9 +55,16 @@ class Placed:
 
 
 @dataclass(slots=True)
+class Voice:
+    id: str
+    name: str
+
+
+@dataclass(slots=True)
 class BackendInfo:
     name: str
     installed: bool
     languages: set[str]
     cloning: bool
     reason: str | None = None
+    voices: dict[str, list[Voice]] = field(default_factory=dict)

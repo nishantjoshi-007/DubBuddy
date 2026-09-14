@@ -367,7 +367,8 @@ BackendInfo name: str, installed: bool, languages: set[str], cloning: bool, reas
 ```text
 name: str
 languages() -> set[str]                       ISO-639-1 codes the backend can speak
-synthesize(text, lang, reference_wav: Path|None, out: Path) -> Path      writes 24 kHz mono wav
+synthesize(text, lang, reference_wav: Path|None, out: Path, voice: str|None = None) -> Path   writes 24 kHz mono wav
+voices() -> dict[str, list[Voice]]       Voice(id, name) per language; empty for backends that clone (Phase 3.3)
 ```
 
 ### B4.1 probe
@@ -383,7 +384,9 @@ faster-whisper `WhisperModel(WHISPER_MODEL, device, compute_type)`; `language = 
 Argos. If `src != en` install `src→en`; if `dst != en` install `en→dst`; obtain `from_lang.get_translation(to_lang)` (Argos composes the pivot). Translate segment by segment; keep 1:1 with segments.
 
 ### B4.5 speak
-`backend.synthesize(text_i, dst, reference_wav if backend.cloning else None, seg_i.wav)` per segment.
+`backend.synthesize(text_i, dst, reference_wav if backend.cloning else None, seg_i.wav, voice=options.voice)` per segment; `detail = "segment i of n"`.
+
+Reference clip (Phase 3.7): chosen after transcription — the ≤ 30 s window containing the most speech by ASR segments, cut from `source.wav` at 24 kHz; falls back to the first 30 s when there is no speech.
 
 ### B4.6 fit
 Per segment: slot = `seg.end - seg.start`; ratio = clip_seconds / slot; factor = min(ratio, 1.3) when ratio > 1, otherwise 1.0 — a clip that already fits is never slowed down to fill its slot (review finding F4: the old clamp stretched every short clip by 25 %); `atempo` (chained when outside 0.5–2.0) → fitted clip. Placement: `start_i = max(seg.start, prev_end)`; `end_i = start_i + fitted_seconds`. Assemble on silence of `video_duration` seconds → `dubbed.wav` (24 kHz mono), padded or trimmed to the video length exactly (done with numpy + soundfile for an exact sample count; every other media operation is an ffmpeg subprocess).
@@ -422,8 +425,11 @@ DATA_DIR/jobs/<id>/status.json
   "source": {"type": "youtube|upload", "url": str|null, "filename": str|null},
   "options": {"to_lang": "es", "from_lang": null, "backend": "kokoro", "burn_subtitles": true},
   "output": null | "out.mp4", "download_url": null | "/api/jobs/<id>/download",
-  "warnings": []          human sentences, e.g. speech that did not fit before the video ended (shown, not fatal)
+  "warnings": [],         human sentences, e.g. speech that did not fit before the video ended (shown, not fatal)
+  "detail": null | "downloading 3.1 MB of 7.4 MB" | "segment 4 of 12"   short text for the current step (Phase 3.1)
 }
+
+`options` also carries `"voice": null | "<voice id>"` (Phase 3.3).
 ```
 
 Writes are atomic (write temp, `os.replace`). Reads never lock. Any web process can answer for any job. `MAX_CONCURRENT_JOBS` bounds CPU use; extra jobs wait in the pool queue in `queued`.
@@ -450,7 +456,13 @@ index.html  (served for / and /jobs/<id>; <body data-job-id="…">)
   app.css   system font stack, prefers-color-scheme defaults, toggle overrides
 ```
 
-Form fields: source tabs (YouTube URL / upload, upload tab hidden when `ALLOW_UPLOADS=false`), target language, backend (conditional), "Burn subtitles into the video" (default on), Advanced fold → source language override, one-line rights notice.
+Form fields: source tabs (YouTube URL / upload, upload tab hidden when `ALLOW_UPLOADS=false`), target language, backend (conditional), voice (conditional: shown when the backend lists voices for the chosen language, Phase 3.3), "Burn subtitles into the video" (default on), Advanced fold → source language override, one-line rights notice. The job view shows `step`, `progress`, `detail`, `warnings`, `error`.
+
+`GET /api/backends` (Phase 3.3): each backend also carries `voices: {lang: [{id, name}]}`; Chatterbox's is empty because it clones.
+
+Rate limit (Phase 3.5): `RATE_LIMIT_JOBS="10/hour"` (off by default) — token bucket per client IP on `POST /jobs`; `X-Forwarded-For` honoured only with `TRUST_PROXY=true`; 429 `{"error": …}`.
+
+CLI (Phase 3.2): `respeak dub <url-or-file> --to LANG [--from LANG] [--backend …] [--voice ID] [--no-burn] [--out PATH] [--data-dir DIR]`, `respeak serve`, `respeak prewarm`; same `run_job`, progress on stderr, exit 0/1.
 
 ---
 

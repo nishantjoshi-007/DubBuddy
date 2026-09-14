@@ -46,6 +46,9 @@ dependencies = [
 [project.optional-dependencies]
 clone = ["chatterbox-tts>=0.1.7"]
 
+[project.scripts]
+respeak = "respeak.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/nishantjoshi-007/DubBuddy"
 Issues = "https://github.com/nishantjoshi-007/DubBuddy/issues"

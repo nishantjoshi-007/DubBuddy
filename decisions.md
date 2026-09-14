@@ -53,6 +53,7 @@ N-20  `plan.md` is a private working document and is not pushed; `decisions.md` 
 N-21  Go-ahead for Phase 0 and Phase 1: Claude orchestrates, subagents (Opus where it matters) execute tasks.
 N-22  Clone-and-run only. No PyPI package. (2026-09-12)
 N-23  Skip building the Docker image for now; the Dockerfile and compose file stay in the repo untested. Root disk freed (39 GB). Folder renamed to Respeak on disk. (2026-09-12)
+N-24  Exactly two TTS models, Kokoro and Chatterbox, and no other engine of any kind (no Qwen3-ASR, no LLM translator, no whisper.cpp, no third TTS). The CLI is wanted. Phase 3 runs in full. (2026-09-13)
 ```
 
 ---
@@ -264,6 +265,9 @@ npm / crates / Docker Hub / Homebrew   all free                       all free
 GitHub org name      taken (a user)                                   taken (a user)
 ```
 Recommendation: **Respeak**. It signals the purpose without a tagline, works as a command, and has no same-name product. Sonoro is the prettier word but sits on top of a hi-fi brand that files trademarks.
+
+**D-44 Model roster is closed** — Made (Nishant, N-24)
+Kokoro (default, CPU) and Chatterbox (cloning, GPU) are the only speech models Respeak will ever ship; faster-whisper is the only ASR; Argos the only translator. Every "possible third backend later" note in D-06 and D-07 is void. The interfaces stay, because they keep the two backends honest, not because more are coming.
 Still to do by Nishant (2 minutes each): search "respeak" at https://tmsearch.uspto.gov and https://euipo.europa.eu/eSearch — automated lookups were blocked (HTTP 403).
 
 **D-39 Which documents are public** — Made (Nishant, N-20)
@@ -386,18 +390,12 @@ Qwen3-ASR-0.6B (transformers, CPU)  29.5 s warm          "fronts"; 92 s load
 Ideas explicitly deferred. Each has a home in the plan's Phase 3 or IGNORE tier.
 
 ```text
-CLI                                   Phase 3 (D-35)
-voice picker                          Phase 3 (D-37)
-voice cloning for more TTS models     later (D-37)
-visual redesign                       Phase 3 (D-28)
-LLM translator for GPU users          Phase 3 optional (D-36)
-whisper.cpp / Core ML backend         Phase 3 optional (D-06)
-Qwen3-ASR backend                     Phase 3 optional (D-06)
-Qwen3-TTS backend                     Phase 3 optional (D-07)
-rate limiting                         Phase 3
-HF Spaces / Oracle / VPS recipes      Phase 2 README (D-21)
-Docker data-root move                 if builds keep failing (D-17)
+Docker image build + multi-arch       when Nishant says build (N-23)
+GPU profile verification              needs someone with an NVIDIA card
+HF Spaces / Oracle / VPS recipes      README deploy section covers the essentials (D-21)
+Docker data-root / uv cache move      only if disk becomes a problem again (D-17)
 ```
+Closed by N-24: any further TTS, ASR or translation engine.
 
 ---
 
@@ -422,4 +420,5 @@ DATE        WHAT CHANGED
 2026-09-11  Phase 0 closed: package `respeak/`, uv.lock on 3.14 with CPU torch, D-25 adjusted (CUDA post-step)
 2026-09-12  Phase 1: WP-A…F landed (127 tests), live acceptance passed (YouTube en→es 28 s, upload en→fr 18 s, queue verified), review D-42, fixes F1–F9
 2026-09-12  N-22 / D-43: clone-and-run only, no PyPI
+2026-09-13  N-24 / D-44: model roster closed (Kokoro + Chatterbox only), CLI in; Phase 3 started in full
 ```

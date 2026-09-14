@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     #: through English, Kokoro voices, and the Japanese dictionary when "ja" is in the list).
     prewarm_languages: str = "en,es"
 
+    rate_limit_jobs: str = ""  # e.g. "10/hour"; empty = off
+    trust_proxy: bool = False  # honour X-Forwarded-For for rate limiting
+
     log_level: str = "INFO"
 
     #: Memoised answer of :meth:`resolved_device` (see there).
