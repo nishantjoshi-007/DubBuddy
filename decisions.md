@@ -300,7 +300,8 @@ orchestrator   Claude (this session): defines contracts (flow.md Part B), assign
 subagents      one per work package, Opus for pipeline / backend / frontend work, strict file ownership
 ownership      an agent edits only the modules listed in its brief; shared files (pyproject, config) are owned by the orchestrator
 verification   every "Done when" from plan.md is run on this machine by the orchestrator before a phase closes
-git            commits land on local `main` at each phase boundary; nothing is pushed until Nishant says so
+git            commits land on local `main` at each phase boundary; nothing is pushed until Nishant says so;
+               commit messages carry no co-author or tool attribution lines (Nishant, 2026-09-13)
 repo rename    `gh repo rename respeak` and the folder rename are Nishant's calls (Phase 5)
 ```
 Not checked: trademarks. Do a quick USPTO/EUIPO search before any commercial use.
