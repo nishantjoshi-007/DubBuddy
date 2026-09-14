@@ -13,8 +13,8 @@ video ──▶ transcribe (faster-whisper) ──▶ translate (Argos) ──�
       ──▶ fit each sentence into its original slot ──▶ subtitles ──▶ mux (ffmpeg) ──▶ out.mp4
 ```
 
-This is a personal open-source project of mine, offered as is. Clone it and run it; there is no
-package to install and no promise of updates. See [Status and maintenance](#status-and-maintenance).
+This is a personal open-source project of mine, offered as is under the MIT license. Clone it and
+run it; there is no package to install. Contributions are welcome; see [Contributing](#contributing).
 
 ## Run with Docker (recommended)
 
@@ -120,24 +120,18 @@ On a 4-core laptop CPU a one-minute video takes roughly two minutes: transcripti
 of real time with `small`, Kokoro speaks at about real time, and the 720p encode is fast. A GPU makes
 transcription five to ten times faster and makes Chatterbox usable.
 
-## Deploying
-
-Respeak needs about 2 GB of RAM and minutes of CPU per job, so it does not fit free web tiers
-(Render free and Heroku Basic are 512 MB). It runs fine on any 2 GB VPS, on Oracle's Always Free ARM
-instances, or on a Hugging Face Docker Space (paid plan). Cloud IPs are often blocked by YouTube's
-bot wall; uploads always work, and `YTDLP_COOKIES_FILE` helps with URLs.
-
 ## How it works
 
 `flow.md` describes the request path, the pipeline stages and the on-disk job state. `decisions.md`
 records every design choice, what was rejected and why, and the measurements behind them.
 
-## Status and maintenance
+## Contributing
 
-Respeak is a hobby project and I am the only person working on it. I offer it as is, under the MIT
-license, with no promise of fixes or releases. The thing most likely to break is YouTube downloading;
-that is why the Docker image updates yt-dlp on every start, and from source
-`uv lock --upgrade-package yt-dlp && uv sync` or `YTDLP_AUTO_UPDATE=true` does the same.
+Contributions are appreciated. Open an issue for a bug or an idea, or send a pull request against
+`main`. Before you open one, run `uv run ruff check`, `uv run ruff format --check` and
+`uv run pytest -m "not slow"`; that is exactly what CI runs on Python 3.12, 3.13 and 3.14. Keep a
+change small and add a test for what it changes. I keep Respeak to two TTS backends on purpose, so a
+new backend is the one kind of change I will turn down; `decisions.md` records why.
 
 ## Responsible use
 
