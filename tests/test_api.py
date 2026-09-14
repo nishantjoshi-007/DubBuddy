@@ -348,6 +348,75 @@ def test_a_voice_for_a_backend_that_has_none_is_refused(client: TestClient, sett
     assert "no preset voices" in response.json()["error"]
 
 
+# --------------------------------------------------------------------------- 3E: voice previews
+
+
+@pytest.fixture
+def sampler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[tuple[str, str, str]]:
+    """Stand in for the synthesiser: record the triple and hand back a real little WAV file."""
+    asked: list[tuple[str, str, str]] = []
+
+    def fake_ensure(_settings: Settings, backend: str, lang: str, voice: str) -> Path:
+        asked.append((backend, lang, voice))
+        path = tmp_path / f"{backend}-{lang}-{voice}.wav"
+        path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt ")
+        return path
+
+    monkeypatch.setattr(api_module, "ensure_sample", fake_ensure)
+    return asked
+
+
+def test_a_voice_sample_is_served_as_a_cacheable_wav(
+    client: TestClient, sampler: list[tuple[str, str, str]]
+) -> None:
+    response = client.get("/api/voices/kokoro/es/ef_dora")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "audio/wav"
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    assert response.content.startswith(b"RIFF")
+    assert sampler == [("kokoro", "es", "ef_dora")]
+
+
+@pytest.mark.parametrize(
+    ("path", "fragment"),
+    [
+        ("/api/voices/banana/es/ef_dora", "unknown backend"),
+        ("/api/voices/kokoro/es/bogus", "no voice 'bogus'"),
+        ("/api/voices/kokoro/es/am_adam", "no voice 'am_adam'"),  # a real id, but English
+        ("/api/voices/kokoro/zz/ef_dora", "no voices for 'zz'"),
+    ],
+)
+def test_a_bad_triple_is_400_and_never_reaches_the_filesystem(
+    client: TestClient, settings: Settings, path: str, fragment: str
+) -> None:
+    response = client.get(path)
+    assert response.status_code == 400, response.text
+    assert fragment in response.json()["error"]
+    assert not (settings.data_dir / "voice_samples").exists()
+
+
+@pytest.mark.parametrize("raw", ["..", "../../etc/passwd", "%2e%2e%2f", "ef_dora.wav", "ef_dora%2F.."])
+def test_a_traversing_voice_id_can_never_reach_the_filesystem(
+    client: TestClient, settings: Settings, raw: str
+) -> None:
+    """The id is matched against the backend's own table, never sanitised into a path."""
+    response = client.get(f"/api/voices/kokoro/es/{raw}")
+    assert response.status_code in {400, 404}, response.text
+    assert not (settings.data_dir / "voice_samples").exists()
+
+
+def test_a_backend_with_no_preset_voices_is_404(client: TestClient) -> None:
+    """Chatterbox clones the original speaker, so there is nothing here to preview — ever."""
+    response = client.get("/api/voices/chatterbox/es/ef_dora")
+    assert response.status_code == 404, response.text
+    assert "no preset voices" in response.json()["error"]
+
+
+def test_the_voice_sample_route_runs_in_the_threadpool_not_on_the_loop() -> None:
+    """First play loads a model and synthesises; a coroutine route would do it on the loop (F1)."""
+    assert not inspect.iscoroutinefunction(api_module.voice_sample)
+
+
 # --------------------------------------------------------------------------- 3.5 rate limiting
 
 

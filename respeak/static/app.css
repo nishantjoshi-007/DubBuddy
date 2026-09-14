@@ -33,11 +33,6 @@
   --ring: #12161b;
   --caret: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%2357626e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
-  /* A caption looks the same whatever the room is lit like, so these two do not change. */
-  --cue-bg: #0c0f13;
-  --cue-ink: #f2f5f8;
-  --cue-edge: #3a434e;
-
   --measure: 44rem;
   --r-card: 14px;
   --r-ctl: 9px;
@@ -200,10 +195,13 @@ video {
   gap: 1.1rem;
 }
 
+/* No hero any more (Nishant: "feels too much text"), so the page opens on the card. The top gap is
+   the header's own breathing room rather than the space a heading used to fill: enough to detach the
+   card from the rule above it, not so much that it floats. */
 .main {
   max-width: var(--measure);
   margin: 0 auto;
-  padding-block: 2.75rem 3.5rem;
+  padding-block: 1.75rem 3.5rem;
 }
 
 .site-foot {
@@ -222,33 +220,6 @@ video {
 
 .site-foot a {
   color: var(--muted);
-}
-
-/* ------------------------------------------------------------------ hero */
-
-.display {
-  margin: 0;
-  font-size: clamp(2.05rem, 1.35rem + 3vw, 3rem);
-  font-weight: 700;
-  line-height: 1.06;
-  letter-spacing: -0.028em;
-  text-wrap: balance;
-  max-width: 15ch;
-}
-
-/* The lede, set as a burned-in subtitle: this page's one bold gesture. */
-.cue {
-  display: inline-block;
-  max-width: 32rem;
-  margin: 1.35rem 0 2.25rem;
-  padding: 0.5rem 1.05rem 0.6rem;
-  background: var(--cue-bg);
-  color: var(--cue-ink);
-  border: 1px solid var(--cue-edge);
-  border-radius: 5px;
-  text-align: center;
-  text-wrap: balance;
-  line-height: 1.45;
 }
 
 /* ------------------------------------------------------------------ cards */
@@ -376,6 +347,93 @@ video {
   margin: 0.45rem 0 0;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ voice preview */
+/* "Dora" and "Alex" are not descriptions of a voice, so the picker can play one. The button is
+   round and icon-only: it belongs to the select next to it, not to the row of labelled fields. */
+
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.voice-row .control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preview {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.preview:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.preview:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.preview__icon {
+  display: block;
+}
+
+/* the play triangle sits optically left of centre in a circle unless it is nudged */
+.preview__play {
+  transform: translateX(0.5px);
+}
+
+.preview[data-state="idle"] .preview__stop,
+.preview[data-state="loading"] .preview__stop,
+.preview[data-state="playing"] .preview__play {
+  display: none;
+}
+
+/* Loading keeps the icon's box, so the button never changes size mid-click. */
+.preview[data-state="loading"] .preview__icon {
+  visibility: hidden;
+}
+
+.preview[data-state="playing"] {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.preview__spin {
+  display: none;
+  position: absolute;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: preview-spin 0.7s linear infinite;
+}
+
+.preview[data-state="loading"] .preview__spin {
+  display: block;
+}
+
+@keyframes preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ------------------------------------------------------------------ checkbox */
@@ -883,7 +941,7 @@ video {
   }
 
   .main {
-    padding-block: 2rem 2.5rem;
+    padding-block: 1.35rem 2.5rem;
   }
 
   .card {
@@ -900,11 +958,6 @@ video {
 
   .seg__btn {
     flex: 1 1 100%;
-  }
-
-  .cue {
-    display: block;
-    margin-bottom: 1.85rem;
   }
 
   .btn {

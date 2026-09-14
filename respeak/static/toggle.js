@@ -1,14 +1,18 @@
 // Theme toggle. The preference lives in localStorage only (decisions.md D-31).
 //
-// The class goes on <html>, and the inline script in index.html has already applied a saved one
-// before the first paint. This file only has to put the switch in the right position and keep the
-// two in step afterwards. With nothing saved, the operating system decides (prefers-color-scheme)
-// and the switch follows it, so the picture on the header always matches the page.
+// Three states, not two. "dark" and "light" are a *choice*, stored and honoured for good; "" is no
+// choice at all, which is the default and means "whatever the operating system says". A choice is a
+// class on <html> that app.css keys off; no choice is no class, so `@media (prefers-color-scheme)`
+// decides on its own and keeps deciding — even for a flip this listener never sees (a browser that
+// throttles background tabs, a stylesheet that loads late). The inline script in index.html has
+// already applied a stored choice before the first paint; this file only has to keep the switch in
+// step and write the choice down when it is made.
 
 const root = document.documentElement;
 const checkbox = document.querySelector(".theme-switch__checkbox");
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 
+/** The stored choice, or "" for "follow the operating system". */
 function saved() {
   try {
     const value = localStorage.getItem("theme");
@@ -18,13 +22,14 @@ function saved() {
   }
 }
 
+/** Apply "dark", "light", or "" (no class: prefers-color-scheme decides) and match the switch. */
 function apply(theme) {
   root.classList.toggle("dark-theme", theme === "dark");
   root.classList.toggle("light-theme", theme === "light");
-  if (checkbox) checkbox.checked = theme === "dark";
+  if (checkbox) checkbox.checked = theme === "dark" || (theme === "" && systemDark.matches);
 }
 
-apply(saved() || (systemDark.matches ? "dark" : "light"));
+apply(saved());
 
 if (checkbox) {
   checkbox.addEventListener("change", () => {
@@ -38,7 +43,8 @@ if (checkbox) {
   });
 }
 
-// No stored choice: keep following the operating system if it changes while the page is open.
-systemDark.addEventListener("change", (event) => {
-  if (!saved()) apply(event.matches ? "dark" : "light");
+// No stored choice: follow the operating system while the page is open. With one stored, the flip
+// is ignored — the person has said what they want and a change of room lighting does not undo it.
+systemDark.addEventListener("change", () => {
+  if (!saved()) apply("");
 });

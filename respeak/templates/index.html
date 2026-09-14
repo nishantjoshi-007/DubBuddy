@@ -9,8 +9,9 @@
   <link rel="icon" type="image/svg+xml" href="/static/images/mark.svg" />
   <link rel="stylesheet" href="/static/app.css" />
   <script>
-    // Apply the saved theme before the first paint, so a preference that disagrees with the
-    // operating system never flashes the wrong colours. toggle.js owns everything after this.
+    // Apply the saved theme to <html> before the first paint, so a preference that disagrees with
+    // the operating system never flashes the wrong colours. With nothing saved no class is set at
+    // all and prefers-color-scheme decides in app.css. toggle.js owns everything after this.
     try {
       var t = localStorage.getItem("theme");
       if (t === "dark" || t === "light") document.documentElement.classList.add(t + "-theme");
@@ -45,9 +46,6 @@
 
     <!-- Job form (flow.md B6). Replaced in place by the job view once a job is running. -->
     <section id="form-panel">
-      <h1 class="display">Dub a video into another language</h1>
-      <p class="cue">Respeak listens to what is said, translates it, and speaks it again over the same picture.</p>
-
       <form class="card" id="job-form" novalidate>
         <input type="hidden" name="source_type" id="source-type" value="youtube" />
 
@@ -80,7 +78,20 @@
           </div>
           <div class="field" id="voice-field" hidden>
             <label class="label" for="voice">Voice</label>
-            <select class="control control--select" id="voice" name="voice" disabled></select>
+            <div class="voice-row">
+              <select class="control control--select" id="voice" name="voice" disabled></select>
+              {# A name tells you nothing about a voice, so the picker can play one (plan.md 3.3). #}
+              <button type="button" class="preview" id="voice-preview" data-state="idle"
+                      aria-label="Preview this voice" aria-busy="false" disabled>
+                <svg class="preview__icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"
+                     focusable="false">
+                  <path class="preview__play" d="M5.7 3.4 12.2 8l-6.5 4.6z" fill="currentColor" />
+                  <rect class="preview__stop" x="4.6" y="4.6" width="6.8" height="6.8" rx="1.6"
+                        fill="currentColor" />
+                </svg>
+                <span class="preview__spin" aria-hidden="true"></span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -107,6 +118,9 @@
           <p class="rights">By submitting you confirm you have the right to use this video.</p>
         </div>
       </form>
+
+      {# One shared player for every voice preview, so two samples can never overlap. #}
+      <audio id="voice-sample" preload="none" hidden></audio>
     </section>
 
     <!-- Job view: the same stage, showing one job's progress and then its video. -->

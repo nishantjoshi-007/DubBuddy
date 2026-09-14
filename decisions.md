@@ -291,6 +291,22 @@ pyproject.toml stays  it is what uv reads to lock and install dependencies (the 
 respeak/ stays        a folder Python imports; it has nothing to do with publishing
 ```
 
+**D-46 No hero text** — Made (Nishant, 2026-09-13)
+The big heading and the subtitle-style lede were removed: "feels too much text". The page opens with the card; the header brand and the two tabs carry the meaning. No replacement copy.
+
+**D-47 Voice previews** — Made (Nishant asked; design by Claude)
+```text
+problem     a list of voice names tells nobody what the voice sounds like
+chosen      a play button beside the picker → GET /api/voices/{backend}/{lang}/{voice}
+            the sample is one short sentence in that language, synthesised by the backend on first request and
+            cached under DATA_DIR/voice_samples/…; later plays are instant; ids validated against the voice table
+rejected    shipping pre-rendered clips in the repo (binaries, a build step); generating all 54 at startup (slow, wasteful)
+limits      Chatterbox has no presets (it clones), so no preview there
+```
+
+**D-48 Theme rule** — Made (Nishant, 2026-09-13)
+No stored choice → follow the operating system, live (a flip while the page is open is followed). The toggle overrides and persists in localStorage. Proven in a headless browser across the six combinations of OS scheme × stored value.
+
 **D-45 Phase 3 review findings** — Made (Claude)
 The D-42 review of Phase 3 found seven confirmed issues before the phase closed: `X-Forwarded-For` read from the client-controlled end (rate limit bypass behind a proxy), the Chatterbox `pkg_resources` shim leaking into jieba and breaking Kokoro Chinese in a fresh container, fetch progress freezing after yt-dlp's first file, failed jobs keeping a stale `detail`, an unbounded rate-limit table keyed by raw header text, the speak stage never reaching the top of its range, and oversize uploads charged a token. All fixed with a test each (FIX-3). Lesson recorded: any header a proxy *appends* to must be read from the right.
 
@@ -426,4 +442,5 @@ DATE        WHAT CHANGED
 2026-09-12  N-22 / D-43: clone-and-run only, no PyPI
 2026-09-13  N-24 / D-44: model roster closed (Kokoro + Chatterbox only), CLI in; Phase 3 started in full
 2026-09-13  Phase 3 delivered (WP-3A…3D), live acceptance passed, review D-45 → FIX-3; torchaudio pinned to the CPU index; no attribution trailers on commits (D-41)
+2026-09-13  Nishant's first-look feedback → D-46 (no hero), D-47 (voice previews), D-48 (theme rule); WP-3E
 ```

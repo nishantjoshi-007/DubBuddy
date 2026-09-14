@@ -62,6 +62,8 @@ const dom = {
   backend: el("backend"),
   voiceField: el("voice-field"),
   voice: el("voice"),
+  preview: el("voice-preview"),
+  sample: el("voice-sample"),
   burn: el("burn-subtitles"),
   submit: el("submit-button"),
   formError: el("form-error"),
@@ -275,11 +277,13 @@ function voicesFor(backend, lang) {
 function fillVoices() {
   const entries = voicesFor(selectedBackend(), dom.toLang.value);
   const previous = dom.voice.value;
+  stopPreview(); // the list under the player is about to change
 
   dom.voice.replaceChildren();
   if (!entries.length) {
     // A disabled control stays out of the FormData, so no `voice` is posted when there is no choice.
     dom.voice.disabled = true;
+    dom.preview.disabled = true;
     show(dom.voiceField, false);
     return;
   }
@@ -291,6 +295,7 @@ function fillVoices() {
   }
   dom.voice.value = entries.some((e) => e.id === previous) ? previous : entries[0].id;
   dom.voice.disabled = false;
+  dom.preview.disabled = false;
   show(dom.voiceField, true);
 }
 
@@ -298,6 +303,85 @@ function voiceName(backendName, lang, id) {
   const backend = state.backends.find((b) => b.name === backendName);
   const hit = voicesFor(backend, lang).find((voice) => voice.id === String(id));
   return hit ? hit.name : String(id);
+}
+
+// ---------------------------------------------------------------- voice previews
+
+const preview = {
+  // "backend/lang/voice" -> object URL. Kept for the life of the page, so listening to the same
+  // voice twice costs one request; the server caches the WAV on disk for every later visit.
+  urls: new Map(),
+  key: "", // the voice that is loading or playing right now, "" when nothing is
+  run: 0, // bumped by every stop, so a fetch the user has moved on from can never start playing
+};
+
+const PREVIEW_LABELS = {
+  idle: "Preview this voice",
+  loading: "Loading the voice preview",
+  playing: "Stop the preview",
+};
+
+/** The voice the button would play, or null when there is no choice to play. */
+function pickedVoice() {
+  const backend = selectedBackend();
+  if (!backend || dom.voice.disabled || !dom.toLang.value || !dom.voice.value) return null;
+  const [name, lang, voice] = [backend.name, dom.toLang.value, dom.voice.value];
+  return { name, lang, voice, key: `${name}/${lang}/${voice}` };
+}
+
+function setPreviewState(mode) {
+  dom.preview.dataset.state = mode;
+  dom.preview.setAttribute("aria-busy", mode === "loading" ? "true" : "false");
+  dom.preview.setAttribute("aria-label", PREVIEW_LABELS[mode] || PREVIEW_LABELS.idle);
+}
+
+/** Silence the player and forget whatever is in flight. Safe to call at any time. */
+function stopPreview() {
+  preview.run += 1;
+  preview.key = "";
+  dom.sample.pause();
+  if (dom.sample.currentTime) dom.sample.currentTime = 0;
+  setPreviewState("idle");
+}
+
+/** The object URL for one voice, fetching and caching it the first time. */
+async function previewUrl(pick) {
+  const cached = preview.urls.get(pick.key);
+  if (cached) return cached;
+  const path = [pick.name, pick.lang, pick.voice].map(encodeURIComponent).join("/");
+  const response = await fetch(`/api/voices/${path}`);
+  if (!response.ok) throw new Error(errorMessage(await readJson(response), response));
+  const objectUrl = URL.createObjectURL(await response.blob());
+  preview.urls.set(pick.key, objectUrl);
+  return objectUrl;
+}
+
+async function onPreviewClick() {
+  const pick = pickedVoice();
+  if (!pick) return;
+  // Clicking the button while it is busy with this same voice means "stop", loading or playing.
+  const busy = dom.preview.dataset.state !== "idle" && preview.key === pick.key;
+  stopPreview();
+  if (busy) return;
+
+  const run = preview.run; // this attempt's ticket; any stop after here invalidates it
+  preview.key = pick.key;
+  setPreviewState("loading");
+  try {
+    const objectUrl = await previewUrl(pick);
+    if (run !== preview.run) return;
+    dom.sample.src = objectUrl;
+    await dom.sample.play(); // resolves once it is actually audible, which is what "busy" meant
+    if (run !== preview.run) {
+      dom.sample.pause();
+      return;
+    }
+    setPreviewState("playing");
+  } catch (err) {
+    if (run !== preview.run) return; // the user moved on; their stop already tidied up
+    stopPreview();
+    showFormError(`Could not play a sample of this voice (${err.message}).`);
+  }
 }
 
 // ---------------------------------------------------------------- source tabs
@@ -625,6 +709,9 @@ dom.tabYoutube.addEventListener("keydown", onTabKey);
 dom.tabUpload.addEventListener("keydown", onTabKey);
 dom.backend.addEventListener("change", fillTargetLanguages);
 dom.toLang.addEventListener("change", fillVoices);
+dom.voice.addEventListener("change", stopPreview); // a different voice is not the one playing
+dom.preview.addEventListener("click", onPreviewClick);
+dom.sample.addEventListener("ended", stopPreview);
 dom.form.addEventListener("submit", onSubmit);
 window.addEventListener("popstate", () => window.location.reload());
 

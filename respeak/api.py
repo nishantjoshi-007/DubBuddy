@@ -32,7 +32,8 @@ from .config import Settings, get_settings
 from .jobs import JobStore, get_runner, get_store
 from .lang_codes import NAME_TO_CODE, SOURCE_LANGUAGES
 from .pipeline.inputs import InputError, check_public_url
-from .pipeline.tts import available_backends
+from .pipeline.tts import TTSError, available_backends
+from .pipeline.tts.samples import ensure_sample
 from .pipeline.types import BackendInfo
 from .selfupdate import component_versions
 
@@ -319,6 +320,36 @@ def backends() -> dict[str, Any]:
     }
 
 
+#: How long a browser may keep a voice sample. A voice never changes, so this is generous on purpose.
+SAMPLE_CACHE_CONTROL = "public, max-age=86400"
+
+
+@router.get("/api/voices/{backend}/{lang}/{voice}")
+def voice_sample(backend: str, lang: str, voice: str) -> Any:
+    """A short WAV of one voice saying one sentence, so the picker can be listened to (plan.md 3.3).
+
+    A plain ``def``: the first request for a voice may load a model and synthesise for a second or
+    two, and that belongs in the threadpool, never on the event loop. Afterwards it is a cached file.
+
+    The three path segments are never allowed near the filesystem unchecked — ``ensure_sample``
+    matches the voice id against the backend's own table — so a bad triple is a 400. A backend with
+    no preset voices at all (Chatterbox clones the original speaker instead) is a 404: there is
+    nothing here to preview and there never will be.
+    """
+    settings = get_settings()
+    info = available_backends(settings).get((backend or "").strip().lower())
+    if info is not None and not info.voices:
+        return _error(404, f"the {info.name} backend has no preset voices to preview")
+    try:
+        path = ensure_sample(settings, backend, lang, voice)
+    except ValueError as exc:
+        return _error(400, str(exc))
+    except TTSError as exc:
+        log.exception("could not synthesise the %s/%s/%s voice sample", backend, lang, voice)
+        return _error(500, f"could not synthesise a sample of this voice: {exc}")
+    return FileResponse(path, media_type="audio/wav", headers={"Cache-Control": SAMPLE_CACHE_CONTROL})
+
+
 # --------------------------------------------------------------------------- create
 
 
@@ -598,6 +629,7 @@ def job_download(job_id: str) -> Any:
 
 
 __all__ = [
+    "SAMPLE_CACHE_CONTROL",
     "UPLOAD_FILENAME",
     "RateLimit",
     "RateLimiter",
@@ -613,4 +645,5 @@ __all__ = [
     "reset_rate_limiter",
     "router",
     "safe_name",
+    "voice_sample",
 ]
