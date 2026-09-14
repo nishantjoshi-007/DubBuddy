@@ -259,9 +259,20 @@ def test_pivot_pair_composes_through_english(translator: ArgosTranslator) -> Non
     translator.ensure_pair("es", "fr")
     out = translator.translate(["Los elefantes son muy grandes."], "es", "fr")
     assert len(out) == 1
-    assert out[0].strip()
-    assert "l" in out[0].lower()
+    assert "éléphant" in out[0].lower(), out[0]
     assert out[0] != "Los elefantes son muy grandes."
+
+
+@needs_pivot_download
+def test_es_to_en_is_real_english_not_int8_garbage(translator: ArgosTranslator) -> None:
+    """The es->en 1.9 model decodes to garbage under int8; I run models at their shipped precision."""
+    import argostranslate.settings as argos_settings
+
+    translator.ensure_pair("es", "en")
+    assert argos_settings.compute_type == "default"
+    out = translator.translate(["Los elefantes son muy grandes."], "es", "en")[0]
+    assert "elephant" in out.lower(), out
+    assert "mainstre" not in out
 
 
 def test_ensure_pair_rejects_an_impossible_pair(translator: ArgosTranslator) -> None:

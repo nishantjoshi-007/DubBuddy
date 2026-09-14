@@ -938,7 +938,8 @@ def test_mux_slows_the_picture_when_the_dub_asks_for_it(
         sample_video, stretched_dub, subs, burn=True, lang="es", out=tmp_path / "slow.mp4", stretch=STRETCH
     )
     assert ffmpeg.duration(out) == pytest.approx(10.0 * STRETCH, abs=0.1)
-    assert frame_count(out) == frame_count(sample_video)
+    # constant frame rate: a 1.12x slower picture carries 1.12x the frames (duplicates), ±1 for rounding
+    assert abs(frame_count(out) - round(frame_count(sample_video) * 1.12)) <= 1
     streams = codecs(out)
     assert streams["video"] == ["h264"]
     assert streams["subtitle"] == ["mov_text"]
@@ -961,7 +962,8 @@ def test_mux_reencodes_a_stretched_video_even_with_burn_off(
     assert codecs(sample_video)["video"] == ["mpeg4"]  # the copy path would have kept this
     assert codecs(out)["video"] == ["h264"]
     assert ffmpeg.duration(out) == pytest.approx(10.0 * STRETCH, abs=0.1)
-    assert frame_count(out) == frame_count(sample_video)
+    # constant frame rate: a 1.12x slower picture carries 1.12x the frames (duplicates), ±1 for rounding
+    assert abs(frame_count(out) - round(frame_count(sample_video) * 1.12)) <= 1
 
 
 def test_mux_stretches_a_video_with_no_subtitle_file_at_all(

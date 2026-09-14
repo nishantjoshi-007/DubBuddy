@@ -83,6 +83,10 @@ def mux(
     if chain:
         args += ["-filter_complex", f"[0:v:0]{','.join(chain)}[v]", "-map", "[v]"]
         args += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"]
+        if slowed:
+            # A slowed picture keeps its frame rate by duplicating frames (constant frame rate). Without
+            # this, ffmpeg versions disagree: 8.x keeps the frame count and lowers the rate, 6.x duplicates.
+            args += ["-fps_mode", "cfr"]
     else:
         # Safe to copy: `inputs.ensure_mp4_codecs()` has already turned anything mp4 cannot carry
         # (a VP9/Opus WebM, say) into h264 + aac before the pipeline gets here.

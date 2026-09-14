@@ -20,6 +20,21 @@ if TYPE_CHECKING:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 
+def _configure_argos() -> None:
+    """Run Argos models at the precision they ship with, not CTranslate2's "auto" pick.
+
+    Argos defaults `compute_type` to "auto", which on a CPU means int8. At least one shipped model
+    (es→en 1.9) decodes to garbage under int8 ("mainstre mainstre …") while it is fine in float32; the
+    en→es and en→hi models happen to survive int8, which is how this hid for a while. Translation is a
+    few seconds per job, so the speed of int8 is not worth the risk. `ARGOS_COMPUTE_TYPE` still overrides.
+    """
+    import os
+
+    import argostranslate.settings as argos_settings
+
+    argos_settings.compute_type = os.environ.get("ARGOS_COMPUTE_TYPE", "default")
+
+
 def _quiet_argos_logging() -> None:
     """Argos logs every sentence it translates at INFO on its own child loggers, which drowns CLI progress.
 
@@ -74,6 +89,7 @@ class ArgosTranslator:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        _configure_argos()
         self._routes: dict[tuple[str, str], ITranslation] = {}
         self._routes_lock = threading.Lock()
 

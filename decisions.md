@@ -292,6 +292,17 @@ pyproject.toml stays  it is what uv reads to lock and install dependencies (the 
 respeak/ stays        a folder Python imports; it has nothing to do with publishing
 ```
 
+**D-50 Argos runs at its shipped precision** — Made (2026-09-14)
+```text
+what broke   the first CI run: es→fr through English came back as "mainmainmain…"
+why          Argos hands CTranslate2 compute_type="auto", which picks int8 on a CPU; the es→en 1.9 model
+             decodes to garbage under int8 (verified: float32 gives "The elephants are very big"), while
+             en→es and en→hi survive it — which is why the earlier, weaker test ("contains an l") passed
+chosen       ARGOS_COMPUTE_TYPE defaults to "default" (the precision the package ships, float32); translation
+             is a few seconds per job, so int8's speed is not worth silent garbage; the env var still overrides
+also         a slowed picture is muxed with -fps_mode cfr so ffmpeg 6 and 8 produce the same frame count
+```
+
 **D-46 Hero text** — Made (2026-09-13; revised the same day)
 I took the big heading and the subtitle-style lede out — they felt like too much text — then put back one short heading and one sentence: "Dub a video into another language." / "Paste a link or upload a file. Respeak transcribes, translates, re-voices and subtitles it on your own machine."
 
