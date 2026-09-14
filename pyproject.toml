@@ -1,6 +1,6 @@
 [project]
 name = "respeak"
-version = "0.1.0.dev0"
+version = "2.0.0"
 description = "Dub any video into another language on your own machine: transcribe, translate, re-voice, subtitle, mux."
 readme = "README.md"
 license = "MIT"

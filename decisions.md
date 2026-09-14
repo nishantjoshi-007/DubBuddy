@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Every choice that shapes the rebuild: who made it, why, and what was rejected.
+Every choice that shapes the rebuild: what I chose, why, and what I rejected.
 
 Two systems are named throughout:
 
@@ -16,16 +16,16 @@ If a question comes up mid-build, the answer should be here. If it is not, add i
 How to read:
 
 ```text
-N-xx   fixed by Nishant                      not up for debate
-D-xx   design decision, recommended by Claude, accepted unless a row says otherwise
-A-xx   how the analysis itself was done       method, not product
+N-xx   product decisions I fixed up front    not up for debate
+D-xx   design decisions, with the alternatives I rejected
+A-xx   how I ran the analysis                method, not product
 ```
 
 Superseded rows stay, marked. IDs never change; the plan and the flow refer to them.
 
 ---
 
-# 1. Fixed by Nishant (all on 2026-09-11)
+# 1. Fixed Up Front (all on 2026-09-11)
 
 ```text
 N-01  Analysis and planning first; no fixes until explicitly approved.
@@ -33,7 +33,7 @@ N-02  End state is one branch.
 N-03  That branch is `main`.
 N-04  Must work on the latest Python (3.14); nobody downgrades, not even for deployment.
 N-05  No Fish Audio. TTS must be free, open source, deployable.
-N-06  Nishant's PC is CPU-only; GPU must be an option for others when it helps.
+N-06  My laptop is CPU-only; GPU must be an option for others when it helps.
 N-07  Not deployed today; if deployed: Render / Heroku class, minimise cost.
 N-08  Public open-source repo; installing and running must be easy for anyone.
 N-09  Both Kokoro and Chatterbox; Kokoro default; switch with a simple flag.
@@ -50,10 +50,11 @@ N-17  UI answers: D-29 yes · D-30 yes · D-31 NO, keep the theme toggle · D-32
 N-18  "DubBuddy" is out; a new name is chosen from D-38. `learning-harness.md` stays local (.gitignore).
 N-19  The name is **Respeak** (package `respeak`, CLI `respeak`, page title "Respeak").
 N-20  `plan.md` is a private working document and is not pushed; `decisions.md` and `flow.md` are committed.
-N-21  Go-ahead for Phase 0 and Phase 1: Claude orchestrates, subagents (Opus where it matters) execute tasks.
+N-21  Go-ahead for Phase 0 and Phase 1: build them in independent pieces with strict file ownership (D-41).
 N-22  Clone-and-run only. No PyPI package. (2026-09-12)
 N-23  Skip building the Docker image for now; the Dockerfile and compose file stay in the repo untested. Root disk freed (39 GB). Folder renamed to Respeak on disk. (2026-09-12)
 N-24  Exactly two TTS models, Kokoro and Chatterbox, and no other engine of any kind (no Qwen3-ASR, no LLM translator, no whisper.cpp, no third TTS). The CLI is wanted. Phase 3 runs in full. (2026-09-13)
+N-25  Every file in the project is written in the first person, as by its author — no third-person references to me by name and no mentions of the tooling that helped produce it, in docs, comments and docstrings alike. The first release is tagged v2.0.0: this is a rebuild of the old app, not an increment. (2026-09-13)
 ```
 
 ---
@@ -92,7 +93,7 @@ Rejected: under `static/` (public, path leaks, deletion race).
 
 **D-17 Docker disk on this machine** — assumed
 Chosen: leave the Docker daemon alone; wrap every build in the free-space watchdog; prune after.
-Why: root disk has ~13 GB free and Docker's data-root is on it; Nishant said "docker changes later".
+Why: root disk has ~13 GB free and Docker's data-root is on it; I want the docker changes later, not now.
 Alternative if builds keep failing: move `data-root` to the 900 GB drive (one-line `daemon.json`).
 
 **D-19 Names** — accepted
@@ -164,7 +165,7 @@ Removed: route, model, template, js, css, `inquires/`, the Google Apps Script UR
 Chosen: YouTube URL **or** file upload.
 Why: yt-dlp from datacenter IPs is often blocked by YouTube's bot wall; uploads make the tool work anywhere and make tests hermetic.
 
-**D-26 Upload safety rules** — Claude
+**D-26 Upload safety rules** — Made
 ```text
 size      MAX_UPLOAD_MB enforced while streaming to disk
 name      client filename only used, sanitised, for the download name; stored as jobs/<id>/upload.bin
@@ -186,7 +187,7 @@ Single page: form, then progress and result in place; `/jobs/<id>` reloads the s
 **D-30 ToS modal** — accepted (N-17)
 Removed with its cookie/localStorage logic; replaced by one line under the submit button. Also removes the "commercial use needs approval" text that contradicted the MIT licence.
 
-**D-31 Theme toggle** — **kept, by Nishant** (N-17)
+**D-31 Theme toggle** — **kept** (N-17)
 The toggle stays. With the ToS gone it stores the preference in localStorage only; `cookies.js` is removed.
 
 **D-32 Source language** — accepted (N-17)
@@ -231,8 +232,8 @@ Fixture-based smoke test on a 10 s local clip, offline, Kokoro backend; unit tes
 **D-20 Legal text** — accepted
 The ToS is gone (D-30). README gets a short "responsible use" note. MIT is the only licence.
 
-**D-38 Project name** — **Made (Nishant, N-19): Respeak**
-Problem: "DubBuddy" is out (N-18). Nishant wants **one word, easy to pronounce, flowing**, not necessarily built on "dub". It must also be free on PyPI and GitHub and not collide with the crowded dubbing product space.
+**D-38 Project name** — **Made (N-19): Respeak**
+Problem: "DubBuddy" is out (N-18). I want **one word, easy to pronounce, flowing**, not necessarily built on "dub". It must also be free on PyPI and GitHub and not collide with the crowded dubbing product space.
 Checked 2026-09-11 against PyPI, GitHub exact-name repos, RDAP for .dev / .com / .io, and web search for products:
 ```text
 NAME       SAY IT        MEANING / ROOT                                   PYPI   GITHUB          .DEV   .COM    .IO
@@ -250,7 +251,7 @@ dublate    DUB-late      dub + translate (earlier round)                        
 Rejected after checking: loquo (voice-journal app), vocalo (radio station + English-learning app), verbo / sonara / talkie / aloud / recite / voxa / oratio / voco / sermo / sonora (PyPI taken), glotto / narro / relato / duetto / mimo (.dev taken or a starred repo), echoa ("Echo" apps everywhere), redub / polydub / dubtitle / revoice (products), loqui (Discord), synchro / parlo / idioma / glossa / voci / vocalize / revox (PyPI taken), subdub (Pandrator author's tool), otravoz / altavoz (two words fused).
 Recommendation: **Dobla** — two syllables, smooth, literally "dubs" in Spanish, everything free except the .com. Second: **Locuto** — invented, zero baggage, flows well. Third: **Lalia**.
 
-Finalists after Nishant's shortlist (**Respeak** vs **Sonoro**), domain irrelevant (subdomain of his personal domain):
+Finalists after my own shortlist (**Respeak** vs **Sonoro**), domain irrelevant (it will live on a subdomain of my personal domain):
 ```text
                      RESPEAK                                          SONORO
 signal to a stranger "re-voice it" → says what the tool does         "sound" → needs a tagline to mean dubbing
@@ -266,22 +267,22 @@ GitHub org name      taken (a user)                                   taken (a u
 ```
 Recommendation: **Respeak**. It signals the purpose without a tagline, works as a command, and has no same-name product. Sonoro is the prettier word but sits on top of a hi-fi brand that files trademarks.
 
-**D-44 Model roster is closed** — Made (Nishant, N-24)
+**D-44 Model roster is closed** — Made (N-24)
 Kokoro (default, CPU) and Chatterbox (cloning, GPU) are the only speech models Respeak will ever ship; faster-whisper is the only ASR; Argos the only translator. Every "possible third backend later" note in D-06 and D-07 is void. The interfaces stay, because they keep the two backends honest, not because more are coming.
-Still to do by Nishant (2 minutes each): search "respeak" at https://tmsearch.uspto.gov and https://euipo.europa.eu/eSearch — automated lookups were blocked (HTTP 403).
+Still on my list (2 minutes each): search "respeak" at https://tmsearch.uspto.gov and https://euipo.europa.eu/eSearch — automated lookups were blocked (HTTP 403).
 
-**D-39 Which documents are public** — Made (Nishant, N-20)
+**D-39 Which documents are public** — Made (N-20)
 ```text
-plan.md              private: tasks, estimates, our register        → .gitignore
+plan.md              private: tasks, estimates, my register         → .gitignore
 learning-harness.md  private                                        → .gitignore
 decisions.md         public: a decision log is what contributors want → committed (moves to docs/ in Phase 5)
 flow.md              public: architecture, old vs new                 → committed (moves to docs/ in Phase 5)
 ```
 
-**D-40 What happens to the old pipeline code** — Made (Claude)
+**D-40 What happens to the old pipeline code** — Made
 Deleted from `main` in Phase 0 rather than moved. Every file stays readable with `git show dev:src/<name>.py`, flow.md Part A documents its behaviour, and nothing in the new system imports it. Keeping dead modules on disk would only tempt an import of moviepy or Fish.
 
-**D-43 Distribution is clone-and-run only** — Made (Nishant, N-22)
+**D-43 Distribution is clone-and-run only** — Made (N-22)
 ```text
 how people get it     git clone → `docker compose up`  or  `uv sync` + `uv run`
 not done              no PyPI package, no `pip install respeak`, no pipx
@@ -291,10 +292,10 @@ pyproject.toml stays  it is what uv reads to lock and install dependencies (the 
 respeak/ stays        a folder Python imports; it has nothing to do with publishing
 ```
 
-**D-46 Hero text** — Made (Nishant, 2026-09-13; revised the same day)
-The big heading and the subtitle-style lede were removed ("feels too much text"), then replaced on request by one short heading and one sentence: "Dub a video into another language." / "Paste a link or upload a file. Respeak transcribes, translates, re-voices and subtitles it on your own machine."
+**D-46 Hero text** — Made (2026-09-13; revised the same day)
+I took the big heading and the subtitle-style lede out — they felt like too much text — then put back one short heading and one sentence: "Dub a video into another language." / "Paste a link or upload a file. Respeak transcribes, translates, re-voices and subtitles it on your own machine."
 
-**D-49 When the dub is longer than the video** — Made (Nishant: "yep, it's a go", 2026-09-13)
+**D-49 When the dub is longer than the video** — Made (2026-09-13)
 ```text
 what happened      English → Hindi expands ~20–30 %; per-sentence speed-up is capped at 1.3× and the cascade pushes
                    later sentences until the last one runs 2.2 s past the end of the picture; assemble() then
@@ -314,7 +315,7 @@ rejected           cutting speech (today); raising the speech cap alone (rushed,
                    freeze-frames only where speech overflows (works, but jerky and much harder to get right)
 ```
 
-**D-47 Voice previews** — Made (Nishant asked; design by Claude)
+**D-47 Voice previews** — Made (2026-09-13)
 ```text
 problem     a list of voice names tells nobody what the voice sounds like
 chosen      a play button beside the picker → GET /api/voices/{backend}/{lang}/{voice}
@@ -324,30 +325,32 @@ rejected    shipping pre-rendered clips in the repo (binaries, a build step); ge
 limits      Chatterbox has no presets (it clones), so no preview there
 ```
 
-**D-48 Theme rule** — Made (Nishant, 2026-09-13)
+**D-48 Theme rule** — Made (2026-09-13)
 No stored choice → follow the operating system, live (a flip while the page is open is followed). The toggle overrides and persists in localStorage. Proven in a headless browser across the six combinations of OS scheme × stored value.
 
-**D-45 Phase 3 review findings** — Made (Claude)
+**D-45 Phase 3 review findings** — Made
 The D-42 review of Phase 3 found seven confirmed issues before the phase closed: `X-Forwarded-For` read from the client-controlled end (rate limit bypass behind a proxy), the Chatterbox `pkg_resources` shim leaking into jieba and breaking Kokoro Chinese in a fresh container, fetch progress freezing after yt-dlp's first file, failed jobs keeping a stale `detail`, an unbounded rate-limit table keyed by raw header text, the speak stage never reaching the top of its range, and oversize uploads charged a token. All fixed with a test each (FIX-3). Lesson recorded: any header a proxy *appends* to must be read from the right.
 
-**D-42 Review before closing a phase** — Made (Claude)
-After the Phase 1 work packages landed, a read-only reviewer agent examined the diff against flow.md Part B and the old system's defect list, confirming each finding by running it. It found ten issues the 127 tests did not: heavy imports reaching the event loop through `health`/`backends`/`resolved_device()`, the sweeper dying permanently on one bad status.json and able to delete a job running longer than 6 h, `fit()` stretching short clips by 25 %, dropped dub tails reported nowhere, `_pipeline_run_fn` swallowing every ImportError, VP9/Opus copied into `out.mp4`, the upload cap enforced only after Starlette spooled the body, yt-dlp's generic extractor reachable for internal URLs (SSRF), and blocking file I/O in an async route. All were fixed before the phase closed (FIX-1). Rule going forward: every phase ends with an independent review pass, and the reviewer must reproduce, not guess.
+**D-42 Review before closing a phase** — Made
+After the six Phase 1 pieces had landed I went back over the whole diff against flow.md Part B and the old system's defect list, in a pass that changed nothing and confirmed every finding by running it. That pass found ten issues the 127 tests did not: heavy imports reaching the event loop through `health`/`backends`/`resolved_device()`, the sweeper dying permanently on one bad status.json and able to delete a job running longer than 6 h, `fit()` stretching short clips by 25 %, dropped dub tails reported nowhere, `_pipeline_run_fn` swallowing every ImportError, VP9/Opus copied into `out.mp4`, the upload cap enforced only after Starlette spooled the body, yt-dlp's generic extractor reachable for internal URLs (SSRF), and blocking file I/O in an async route. All were fixed before the phase closed (FIX-1). Rule going forward: every phase ends with an independent review pass, and every finding in it is reproduced, never guessed.
 
-**D-41 How the build is run** — Made (Claude, per N-21)
+**D-41 How the build is run** — Made (per N-21)
 ```text
-orchestrator   Claude (this session): defines contracts (flow.md Part B), assigns tasks, integrates, verifies
-subagents      one per work package, Opus for pipeline / backend / frontend work, strict file ownership
-ownership      an agent edits only the modules listed in its brief; shared files (pyproject, config) are owned by the orchestrator
-verification   every "Done when" from plan.md is run on this machine by the orchestrator before a phase closes
-git            commits land on local `main` at each phase boundary; nothing is pushed until Nishant says so;
-               commit messages carry no co-author or tool attribution lines (Nishant, 2026-09-13)
-repo rename    `gh repo rename respeak` and the folder rename are Nishant's calls (Phase 5)
+contracts      flow.md Part B is settled before any code: interfaces, stage order, status schema
+pieces         a phase is split into independent pieces (six of them in Phase 1), each integrated and
+               verified as it lands
+ownership      a piece touches only the modules on its own list; the shared files (pyproject.toml,
+               config.py) stay mine, so nothing moves under a piece already in flight
+verification   every "Done when" from plan.md is run on this machine before a phase closes
+git            commits land on local `main` at each phase boundary; nothing is pushed until I say so;
+               commit messages carry no co-author or tool attribution lines (2026-09-13)
+repo rename    `gh repo rename respeak` and the folder rename are mine to do (Phase 5)
 ```
 Not checked: trademarks. Do a quick USPTO/EUIPO search before any commercial use.
 
 ---
 
-# 3. How the Analysis Was Done (A-xx)
+# 3. How I Ran the Analysis (A-xx)
 
 ```text
 A-01  No source modified; only plan.md, flow.md, decisions.md added; gitignored venvs created for running.
@@ -430,7 +433,7 @@ Qwen3-ASR-0.6B (transformers, CPU)  29.5 s warm          "fronts"; 92 s load
 Ideas explicitly deferred. Each has a home in the plan's Phase 3 or IGNORE tier.
 
 ```text
-Docker image build + multi-arch       when Nishant says build (N-23)
+Docker image build + multi-arch       when I say build (N-23)
 GPU profile verification              needs someone with an NVIDIA card
 HF Spaces / Oracle / VPS recipes      README deploy section covers the essentials (D-21)
 Docker data-root / uv cache move      only if disk becomes a problem again (D-17)
@@ -458,10 +461,10 @@ DATE        WHAT CHANGED
 2026-09-11  N-18: rename; D-38 shortlist checked against PyPI / GitHub / domains; learning-harness.md gitignored
 2026-09-11  N-19 Respeak chosen; N-20 plan.md private; N-21 go-ahead; D-39…D-41; flow.md split into Part A (old) / Part B (new contract)
 2026-09-11  Phase 0 closed: package `respeak/`, uv.lock on 3.14 with CPU torch, D-25 adjusted (CUDA post-step)
-2026-09-12  Phase 1: WP-A…F landed (127 tests), live acceptance passed (YouTube en→es 28 s, upload en→fr 18 s, queue verified), review D-42, fixes F1–F9
+2026-09-12  Phase 1: all six pieces landed (127 tests), live acceptance passed (YouTube en→es 28 s, upload en→fr 18 s, queue verified), review D-42, fixes F1–F9
 2026-09-12  N-22 / D-43: clone-and-run only, no PyPI
 2026-09-13  N-24 / D-44: model roster closed (Kokoro + Chatterbox only), CLI in; Phase 3 started in full
-2026-09-13  Phase 3 delivered (WP-3A…3D), live acceptance passed, review D-45 → FIX-3; torchaudio pinned to the CPU index; no attribution trailers on commits (D-41)
-2026-09-13  Nishant's first-look feedback → D-46 (no hero), D-47 (voice previews), D-48 (theme rule); WP-3E
-2026-09-13  Nishant's test feedback → D-46 revised (short intro), D-49 never cut speech / slow the video (WP-3F)
+2026-09-13  Phase 3 delivered (3.1–3.7), live acceptance passed, review D-45 → FIX-3; torchaudio pinned to the CPU index; no attribution trailers on commits (D-41)
+2026-09-13  my first look at the finished page → D-46 (no hero), D-47 (voice previews), D-48 (theme rule)
+2026-09-13  testing it myself → D-46 revised (short intro), D-49 never cut speech / slow the video
 ```

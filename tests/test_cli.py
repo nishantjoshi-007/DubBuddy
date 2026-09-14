@@ -1,4 +1,4 @@
-"""WP-3B: the `respeak` command (flow.md B2, B6; plan.md 3.2).
+"""The `respeak` command (flow.md B2, B6; plan.md 3.2).
 
 Everything here is offline and instant except `test_dub_writes_a_playable_file`, which runs the whole
 pipeline on `tests/fixtures/sample.mp4` with the `base` Whisper model; it skips when the caches it

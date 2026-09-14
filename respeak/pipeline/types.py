@@ -1,6 +1,6 @@
 """Shared types for the pipeline (flow.md B4).
 
-Owned by the orchestrator; stages import from here.
+Every stage imports its types from here, so the contract lives in one file.
 """
 
 from __future__ import annotations

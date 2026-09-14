@@ -1,5 +1,7 @@
 # Respeak
 
+[![CI](https://github.com/nishantjoshi-007/DubBuddy/actions/workflows/ci.yml/badge.svg)](https://github.com/nishantjoshi-007/DubBuddy/actions/workflows/ci.yml)
+
 Dub any video into another language on your own machine.
 
 Give Respeak a YouTube URL or a video file and a target language. It transcribes the speech, translates
@@ -11,8 +13,8 @@ video ──▶ transcribe (faster-whisper) ──▶ translate (Argos) ──�
       ──▶ fit each sentence into its original slot ──▶ subtitles ──▶ mux (ffmpeg) ──▶ out.mp4
 ```
 
-This is a personal open-source project offered as is. Clone it and run it; there is no package to
-install and no promise of updates. See [Status and maintenance](#status-and-maintenance).
+This is a personal open-source project of mine, offered as is. Clone it and run it; there is no
+package to install and no promise of updates. See [Status and maintenance](#status-and-maintenance).
 
 ## Run with Docker (recommended)
 
@@ -132,14 +134,16 @@ records every design choice, what was rejected and why, and the measurements beh
 
 ## Status and maintenance
 
-Respeak is a hobby project by one person. It is offered as is, under the MIT license, with no promise of
-fixes or releases. The most likely thing to break is YouTube downloading; the Docker image updates yt-dlp
-on every start for that reason, and from source `uv lock --upgrade-package yt-dlp && uv sync` or `YTDLP_AUTO_UPDATE=true` does the same.
+Respeak is a hobby project and I am the only person working on it. I offer it as is, under the MIT
+license, with no promise of fixes or releases. The thing most likely to break is YouTube downloading;
+that is why the Docker image updates yt-dlp on every start, and from source
+`uv lock --upgrade-package yt-dlp && uv sync` or `YTDLP_AUTO_UPDATE=true` does the same.
 
 ## Responsible use
 
-Only dub videos you have the right to use. The tool clones nobody's voice unless you install the
-Chatterbox backend and choose it; even then, use it for content you are allowed to re-voice.
+I built Respeak for videos you have the right to use, and I ask you to keep it to those. It clones
+nobody's voice unless you install the Chatterbox backend and choose it; even then, use it only for
+content you are allowed to re-voice.
 
 ## License
 

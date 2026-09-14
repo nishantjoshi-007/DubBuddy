@@ -1,4 +1,4 @@
-"""WP-F: the whole pipeline on a checked-in clip (flow.md B4.1–B4.8, B5, B7; plan.md 1.1, 1.10, 1.12).
+"""The whole pipeline on a checked-in clip (flow.md B4.1–B4.8, B5, B7; plan.md 1.1, 1.10, 1.12).
 
 Offline once the caches the README describes exist (whisper `base`, Kokoro-82M, the Argos en->es
 package); without them and without the network every test here skips instead of failing.
@@ -18,8 +18,8 @@ package); without them and without the network every test here skips instead of 
            -c:v libx264 -preset veryfast -crf 30 -pix_fmt yuv420p -g 30 \
            -c:a aac -b:a 64k -shortest -movflags +faststart tests/fixtures/sample.mp4
 
-Only the MP4 is checked in; the intermediate WAV is not (tests/fixtures/speech_en.wav belongs to WP-C
-and is a different, longer clip).
+Only the MP4 is checked in; the intermediate WAV is not (tests/fixtures/speech_en.wav is a different,
+longer clip, used by the transcription tests).
 """
 
 from __future__ import annotations

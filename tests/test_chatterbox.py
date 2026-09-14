@@ -1,4 +1,4 @@
-"""WP-3D: the Chatterbox cloning backend (flow.md B4.5, decisions D-07 / D-27).
+"""The Chatterbox cloning backend (flow.md B4.5, decisions D-07 / D-27).
 
 Chatterbox ships as the optional `clone` extra, so almost everything here runs whether or not the
 extra is installed: the language table, the protocol shape, the pre-flight errors and the promise

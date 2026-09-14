@@ -1,4 +1,4 @@
-"""WP-3E: the voice-preview cache behind ``GET /api/voices/{backend}/{lang}/{voice}``.
+"""The voice-preview cache behind ``GET /api/voices/{backend}/{lang}/{voice}``.
 
 Everything here is offline except the one ``slow`` test at the bottom, which really asks Kokoro to
 speak and is skipped unless the model is already in the huggingface cache. The rest drives

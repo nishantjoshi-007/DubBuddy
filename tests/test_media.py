@@ -1,4 +1,4 @@
-"""WP-B: ffmpeg helpers, inputs, fit/assemble, subtitles, mux (flow.md B4.1/B4.2/B4.6/B4.7/B4.8).
+"""ffmpeg helpers, inputs, fit/assemble, subtitles, mux (flow.md B4.1/B4.2/B4.6/B4.7/B4.8).
 
 Every fixture is generated with ffmpeg at test time, so the suite is hermetic and offline. The one
 YouTube test only probes metadata and skips itself when the network is unreachable.

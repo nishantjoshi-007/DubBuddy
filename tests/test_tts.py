@@ -1,4 +1,4 @@
-"""WP-D and WP-3B: the TTS backends, their registry and the voice table (flow.md B4.5, plan.md 3.3).
+"""The TTS backends, their registry and the voice table (flow.md B4.5, plan.md 3.3).
 
 The Kokoro tests need hexgrad/Kokoro-82M plus the voices they actually speak with; those are in the
 huggingface cache on a normal dev box. When neither the cache nor the network has them the synthesis

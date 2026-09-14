@@ -5,7 +5,7 @@ practice. It ships as the `clone` extra, so it is usually absent: nothing here i
 module scope, the class always constructs, and `installed()` / `reason()` let
 `available_backends()` explain what to run.
 
-Measured on this 4-core laptop CPU (WP-3D): 3.0 GB of checkpoints from ResembleAI/chatterbox on
+Measured on my 4-core laptop CPU: 3.0 GB of checkpoints from ResembleAI/chatterbox on
 first use, 25-50 s to load them, then 70-90 s per sentence — about 25x slower than real time,
 against roughly real time for Kokoro. The UI says "GPU recommended" for a reason.
 """

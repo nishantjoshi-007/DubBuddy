@@ -1,4 +1,4 @@
-"""The orchestrator: one job, eight stages, one `out.mp4` (flow.md B4.1–B4.8, B7; plan.md 1.1, 1.10).
+"""One job, eight stages, one `out.mp4` (flow.md B4.1–B4.8, B7; plan.md 1.1, 1.10).
 
 `run_job()` is the synchronous function :class:`respeak.jobs.JobRunner` calls in a worker thread — no
 asyncio anywhere below this line. Every stage marks itself in `status.json` *before* it does any work, so

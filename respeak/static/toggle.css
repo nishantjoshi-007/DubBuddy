@@ -1,4 +1,4 @@
-/* Theme toggle (decisions.md D-31 — kept, by Nishant).
+/* Theme toggle (decisions.md D-31 — kept).
    The sun/moon switch stays; it is scaled down and quietened so it sits inside the header rather
    than shouting from it, and the checkbox is now visually hidden instead of display:none so it
    keeps its place in the tab order. Every colour here belongs to the switch's own little sky, not

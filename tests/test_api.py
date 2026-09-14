@@ -1,4 +1,4 @@
-"""WP-A: job store, job runner, routes and sweeper (flow.md B3, B5, B7).
+"""Job store, job runner, routes and sweeper (flow.md B3, B5, B7).
 
 Everything here is offline: no model, no network, no ffmpeg. The pipeline itself is stubbed, which is
 the point of injecting ``run_fn`` into :class:`respeak.jobs.JobRunner`.
@@ -207,7 +207,7 @@ def test_validation_errors_are_400_json_and_create_nothing(
 def test_a_backend_that_is_not_installed_is_refused_with_its_own_reason(
     client: TestClient, settings: Settings, runner: StubRunner
 ) -> None:
-    """Whatever WP-D reports as missing must be refused before the job exists (D-27)."""
+    """Whatever the backend registry reports as missing is refused before the job exists (D-27)."""
     infos = available_backends(settings)
     missing = [info for info in infos.values() if not info.installed]
     if not missing:

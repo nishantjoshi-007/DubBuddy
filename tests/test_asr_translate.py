@@ -1,4 +1,4 @@
-"""WP-C: faster-whisper transcription (B4.3) and Argos translation through English (B4.4).
+"""faster-whisper transcription (B4.3) and Argos translation through English (B4.4).
 
 Offline once the caches described in the README exist: whisper `base` under the HF hub cache and the Argos
 en->es package under ~/.local/share/argos-translate.  Anything needing a download skips instead of failing.

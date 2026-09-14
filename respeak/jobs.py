@@ -41,7 +41,7 @@ MIN_AGE_MINUTES = 5
 #: A `queued`/`running` job older than this belongs to a server that died mid-job (flow.md B5).
 STALE_RUNNING_HOURS = 6
 
-#: ``run_fn(job_id, settings, store)`` — the injected pipeline entry point (WP-F's ``pipeline/run.py``).
+#: ``run_fn(job_id, settings, store)`` — the injected pipeline entry point (``pipeline/run.py``).
 RunFn = Callable[[str, Settings, "JobStore"], None]
 
 
@@ -252,7 +252,7 @@ def _derive(status: dict[str, Any]) -> dict[str, Any]:
 
 
 def placeholder_run(job_id: str, settings: Settings, store: JobStore) -> None:
-    """Default ``run_fn`` until WP-F lands ``respeak/pipeline/run.py``."""
+    """Default ``run_fn`` when no pipeline is injected: it refuses instead of pretending to dub."""
     raise RuntimeError("the dubbing pipeline is not wired up yet")
 
 

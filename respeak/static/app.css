@@ -195,7 +195,7 @@ video {
   gap: 1.1rem;
 }
 
-/* No hero any more (Nishant: "feels too much text"), so the page opens on the card. The top gap is
+/* No hero any more — it read as too much text — so the page opens on the card. The top gap is
    the header's own breathing room rather than the space a heading used to fill: enough to detach the
    card from the rule above it, not so much that it floats. */
 .intro {

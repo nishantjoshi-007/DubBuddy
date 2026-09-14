@@ -1,6 +1,6 @@
 """The TTS backend contract (flow.md B4).
 
-Owned by the orchestrator; kokoro.py and chatterbox.py implement it.
+One protocol, two implementations: kokoro.py and chatterbox.py.
 """
 
 from __future__ import annotations
