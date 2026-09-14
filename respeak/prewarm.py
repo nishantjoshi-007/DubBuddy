@@ -123,10 +123,28 @@ def _warm_argos_pair(translator: Translator, src: str, dst: str) -> str:
     return f"{src}->{dst} ready"
 
 
+def download_voice_tensors(lang: str) -> int:
+    """Fetch every voice file Kokoro has for `lang` into the HF cache (each is ~0.5 MB).
+
+    Kokoro loads a voice tensor from the Hub the first time it is asked for it, so without this a
+    voice picked from the menu on an offline machine fails at `speak`. Returns how many were fetched.
+    """
+    from huggingface_hub import hf_hub_download
+
+    from .pipeline.tts.kokoro import REPO_ID, VOICE_IDS
+
+    count = 0
+    for voice in VOICE_IDS.get(lang, ()):
+        hf_hub_download(repo_id=REPO_ID, filename=f"voices/{voice}.pt")
+        count += 1
+    return count
+
+
 def _warm_kokoro_voice(settings: Settings, lang: str, out_dir: Path) -> str:
-    """Speak one sentence, which pulls that language's voice tensor into the HF cache."""
+    """Download all of `lang`'s voice tensors, then speak one sentence to prove the pipeline loads."""
     from .pipeline.tts import get_backend
 
+    fetched = download_voice_tensors(lang)
     backend = get_backend("kokoro", settings)
     text = SAMPLES.get(lang)
     if text is None:  # a voice was added to kokoro.VOICES without a sample sentence here
@@ -136,7 +154,7 @@ def _warm_kokoro_voice(settings: Settings, lang: str, out_dir: Path) -> str:
     backend.synthesize(text, lang, None, out)
     size = out.stat().st_size if out.is_file() else 0
     voice = getattr(backend, "voice_for", lambda _lang: "?")(lang)
-    return f"voice {voice}, {size} bytes"
+    return f"{fetched} voices cached; spoke with {voice}, {size} bytes"
 
 
 def unidic_ready() -> bool:

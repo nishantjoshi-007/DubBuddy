@@ -247,3 +247,19 @@ def test_a_failed_step_is_reported_and_sets_the_exit_code(
     assert prewarm.FAILED in out
     assert "the model registry is offline" in out
     assert "1 of 3 steps failed" in out
+
+
+def test_download_voice_tensors_fetches_every_voice_of_the_language(monkeypatch):
+    """Every id in the table for the language is requested from the Kokoro repo, and nothing else."""
+    import huggingface_hub
+
+    from respeak.pipeline.tts.kokoro import REPO_ID, VOICE_IDS
+
+    asked: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        huggingface_hub, "hf_hub_download", lambda repo_id, filename: asked.append((repo_id, filename))
+    )
+    fetched = prewarm.download_voice_tensors("hi")
+    assert fetched == len(VOICE_IDS["hi"]) == 4
+    assert asked == [(REPO_ID, f"voices/{v}.pt") for v in VOICE_IDS["hi"]]
+    assert prewarm.download_voice_tensors("xx") == 0
