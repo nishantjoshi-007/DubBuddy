@@ -26,6 +26,10 @@ WORKDIR /app
 
 # Dependencies first, in their own layer: they change only when the lockfile does, so editing
 # respeak/ never re-resolves torch. --no-install-project because the source is not here yet.
+# A compiler for the few dependencies without a Python 3.14 wheel (mojimoji, from misaki[ja]).
+# Builder stage only: the runtime stage copies the finished venv and never needs gcc.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
